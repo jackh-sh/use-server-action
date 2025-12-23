@@ -28,7 +28,10 @@
         }
     },
     "files": [
-        "dist"
+        "dist",
+        "package.json",
+        "README.md",
+        "LICENSE"
     ],
     "scripts": {
         "build": "tsup",
@@ -46,7 +49,7 @@
         "hook",
         "typescript"
     ],
-    "author": "",
+    "author": "Jack Humphries <jack@jackh.sh>",
     "license": "MIT",
     "peerDependencies": {
         "react": ">=18.0.0",
