@@ -1,20 +1,10 @@
-// Client hook
 export { useServerAction } from "./use-server-action";
 export type {
     UseServerActionInput,
     UseServerActionReturn,
 } from "./use-server-action";
 
-// Server utilities
-export {
-    serverAction,
-    success,
-    error,
-    isSuccess,
-    isError,
-    unwrap,
-    unwrapOr,
-} from "./server/server-action";
+// Re-export types only from server (safe for client bundles)
 export type {
     ServerActionResult,
     ServerActionSuccess,

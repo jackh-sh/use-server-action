@@ -16,7 +16,7 @@ npm install use-server-action
 // app/actions.ts
 "use server";
 
-import { serverAction, success, error } from "use-server-action";
+import { serverAction, success, error } from "use-server-action/server";
 
 export const createUser = serverAction(async (name: string) => {
     if (!name.trim()) {
@@ -112,7 +112,7 @@ A React hook for executing server actions with loading, error, and success state
 Wraps an async function to return a standardized `ServerActionResult`. Automatically catches errors.
 
 ```ts
-import { serverAction } from "use-server-action";
+import { serverAction } from "use-server-action/server";
 
 export const myAction = serverAction(async (input: string) => {
     // Your logic here - just throw errors normally
@@ -126,7 +126,7 @@ export const myAction = serverAction(async (input: string) => {
 Helper functions to create result objects manually:
 
 ```ts
-import { success, error } from "use-server-action";
+import { success, error } from "use-server-action/server";
 
 export async function myAction(id: string) {
     const item = await db.find(id);
@@ -142,7 +142,7 @@ export async function myAction(id: string) {
 ### Type Guards
 
 ```ts
-import { isSuccess, isError, unwrap, unwrapOr } from "use-server-action";
+import { isSuccess, isError, unwrap, unwrapOr } from "use-server-action/server";
 
 const result = await myAction("123");
 
