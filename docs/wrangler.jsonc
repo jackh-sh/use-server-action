@@ -1,7 +1,8 @@
 {
     "name": "use-server-action-docs",
     "compatibility_date": "2024-09-01",
-
+    "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+    "main": ".open-next/worker.js",
     "observability": {
         "enabled": true,
     },
