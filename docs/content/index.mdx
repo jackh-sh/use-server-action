@@ -16,7 +16,7 @@ A type-safe React hook and utilities for working with Next.js server actions.
 // Server action
 import { serverAction } from "use-server-action/server";
 
-export const createUser = serverAction(async (name: string) => {
+export const createUserAction = serverAction(async (name: string) => {
     return await db.user.create({ data: { name } });
 });
 ```
@@ -24,11 +24,11 @@ export const createUser = serverAction(async (name: string) => {
 ```tsx
 // Client component
 import { useServerAction } from "use-server-action";
-import { createUser } from "./actions";
+import { createUserAction } from "./actions";
 
 function CreateUserForm() {
     const { execute, isPending, isSuccess, error } = useServerAction({
-        action: createUser,
+        action: createUserAction,
     });
 
     return (

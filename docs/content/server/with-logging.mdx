@@ -1,0 +1,21 @@
+# withLogging
+
+Logs action calls and results:
+
+```ts
+import { withLogging } from "use-server-action/server";
+
+const logger = withLogging({
+    onCall: (params) => {
+        console.log("Action called with:", params);
+    },
+    onSuccess: (data, params) => {
+        console.log("Action succeeded:", data);
+    },
+    onError: (message, code, params) => {
+        console.error(`Action failed [${code}]:`, message);
+    },
+});
+
+export const loggedAction = applyMiddleware(myAction, [logger]);
+```

@@ -1,0 +1,62 @@
+## Background
+
+`use-server-action` began as a small utility that I quietly reused across nearly all of my Next.js projects. Whenever a feature needed a server action, I found myself missing the same core pieces over and over.
+
+Next.js server actions are incredibly powerful: they allow you to run server-side logic with full type safety and a seamless DX that traditional API routes can’t match. But despite how great they are, I kept running into the same issues:
+
+- **No ergonomic way to handle errors**
+- **No unified or predictable response shape** — every action required custom handling
+- **No built-in mechanism for middleware** like authentication, validation, logging, rate limits, etc.
+
+To solve these gaps, `use-server-action` was born — an opinionated but flexible toolkit designed to elevate the server action experience without hiding or replacing the underlying Next.js primitives.
+
+On the server side, the `serverAction()` wrapper standardizes responses, ensures type safety, and eliminates repetitive error handling. On the client side, the `useServerAction()` hook — taking inspiration from TanStack Query’s declarative approach — provides powerful state management for loading, success, and error states, all with strict types and extensibility baked in.
+
+The goal is simple:  
+**Make server actions more consistent, safer, and more enjoyable to work with — without adding friction or magic.**
+
+
+## Extended Version
+
+`use-server-action` was originally built out of necessity. As server actions became a key part of my workflow, I noticed the same friction points slowing me down, especially in more complex applications.
+
+Server actions already provide an elegant way to run code on the server directly from React components. The idea is fantastic, but the real-world experience revealed a few missing pieces:
+
+### 🔹 Error handling felt too manual
+Every action needed its own try/catch block, its own error response shape, and its own handling logic on the client.
+
+### 🔹 Return types weren’t predictable
+Some actions returned raw data, others returned objects, and others threw exceptions. Maintaining consistency across dozens of actions became a chore.
+
+### 🔹 There was no middleware layer
+Authentication, access control, validation, logging — all had to be implemented manually and repeatedly.
+
+To address this, I created reusable patterns, then helper functions, then wrappers… and eventually realized what I really needed was a unified library. That library became `use-server-action`.
+
+### 🎯 The philosophy behind it
+`use-server-action` respects how server actions already work. It doesn’t replace or abstract them away — it simply adds the structure that larger applications depend on:
+
+- A standard, type-safe response model
+- Ergonomic error handling
+- Client-side helpers for loading, success, error, and retry states
+- A middleware system for authentication, validation, logging, and more
+- End-to-end strong typing with no additional config
+
+### 🛠 How it works
+On the server:
+
+- `serverAction()` wraps your logic to provide standardized, type-safe results.
+- Helper functions like `success()` and `error()` give you full control over your return shape.
+- Middleware lets you extend your actions with reusable logic.
+
+On the client:
+
+- The `useServerAction()` hook exposes powerful state management primitives inspired by TanStack Query.
+- You get `execute`, `executeAsync`, `data`, `error`, `isPending`, `isSuccess`, `isError`, and `reset` out of the box.
+- Everything is fully typed end-to-end.
+
+### 🚀 Why it matters
+Whether you're building a small prototype or a production-scale application, consistency and reliability matter. `use-server-action` provides the missing structure that makes server actions delightful to use in real projects.
+
+It’s not a replacement for server actions.  
+It’s the toolkit that makes them *feel complete*.

@@ -1,8 +1,8 @@
 export default {
     index: "Introduction",
+    background: "Background",
     "getting-started": "Getting Started",
-    hook: "useServerAction",
-    server: "Server Utilities",
-    middleware: "Middleware",
+    client: "Client",
+    server: "Server",
     types: "Type Reference",
 };

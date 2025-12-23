@@ -1,0 +1,89 @@
+# Common Patterns
+
+### Authentication Middleware
+
+```ts
+const withAuth = createMiddleware(async (next, ...params) => {
+    const session = await getSession();
+
+    if (!session?.user) {
+        return { ok: false, message: "Please sign in", code: "UNAUTHORIZED" };
+    }
+
+    return next(...params);
+});
+```
+
+### Role-Based Access
+
+```ts
+const withRole = (role: string) =>
+    createMiddleware(async (next, ...params) => {
+        const user = await getUser();
+
+        if (!user) {
+            return { ok: false, message: "Unauthorized", code: "UNAUTHORIZED" };
+        }
+
+        if (user.role !== role) {
+            return { ok: false, message: "Forbidden", code: "FORBIDDEN" };
+        }
+
+        return next(...params);
+    });
+
+// Usage
+export const adminAction = applyMiddleware(myAction, [withRole("admin")]);
+```
+
+### Rate Limiting
+
+```ts
+const rateLimit = new Map<string, number[]>();
+
+const withRateLimit = (limit: number, windowMs: number) =>
+    createMiddleware(async (next, ...params) => {
+        const ip = headers().get("x-forwarded-for") ?? "unknown";
+        const now = Date.now();
+        const windowStart = now - windowMs;
+
+        const requests = rateLimit.get(ip)?.filter(t => t > windowStart) ?? [];
+
+        if (requests.length >= limit) {
+            return {
+                ok: false,
+                message: "Too many requests",
+                code: "RATE_LIMITED",
+            };
+        }
+
+        requests.push(now);
+        rateLimit.set(ip, requests);
+
+        return next(...params);
+    });
+
+// Usage: 10 requests per minute
+export const limitedAction = applyMiddleware(myAction, [
+    withRateLimit(10, 60000),
+]);
+```
+
+### Error Logging
+
+```ts
+const withErrorLogging = createMiddleware(async (next, ...params) => {
+    const result = await next(...params);
+
+    if (!result.ok) {
+        // Send to error tracking service
+        await trackError({
+            message: result.message,
+            code: result.code,
+            params,
+        });
+    }
+
+    return result;
+});
+```

@@ -1,0 +1,41 @@
+# withZodValidation
+
+Before using this middleware, you'll need to install zod:
+
+```bash npm2yarn
+npm install zod
+```
+
+This middleware validates input against a Zod-compatible schema:
+
+```ts
+import { z } from "zod";
+import { withValidation, applyMiddleware, serverAction } from "use-server-action/server";
+
+const CreateUserSchema = z.object({
+    name: z.string().min(1, "Name is required"),
+    email: z.string().email("Invalid email"),
+});
+
+const createUser = serverAction(async (input: z.infer<typeof CreateUserSchema>) => {
+    return await db.user.create({ data: input });
+});
+
+export const validatedCreateUser = applyMiddleware(createUser, [
+    withValidation(CreateUserSchema),
+]);
+```
+
+#### Options
+
+```ts
+withValidation(schema, {
+    // Custom error code (default: "VALIDATION_ERROR")
+    code: "INVALID_INPUT",
+
+    // Custom error message formatter
+    formatError: (error) => {
+        return error.errors?.map(e => e.message).join(", ") ?? "Invalid input";
+    },
+});
+```

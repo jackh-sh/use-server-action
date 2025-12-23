@@ -1,4 +1,4 @@
-# Server Utilities
+# Server Action
 
 Server-side utilities for creating and handling server actions.
 
@@ -21,7 +21,7 @@ Wraps an async function to return a standardized `ServerActionResult`. Automatic
 ```ts
 import { serverAction } from "use-server-action/server";
 
-export const createUser = serverAction(async (name: string) => {
+export const createUserAction = serverAction(async (name: string) => {
     // Just throw errors normally - they'll be caught and converted
     if (!name.trim()) {
         throw new Error("Name is required");
@@ -35,7 +35,7 @@ export const createUser = serverAction(async (name: string) => {
 ### With Error Callback
 
 ```ts
-export const createUser = serverAction(
+export const createUserAction = serverAction(
     async (name: string) => {
         const user = await db.user.create({ data: { name } });
         return user;
@@ -56,7 +56,7 @@ Helper functions to manually create result objects:
 ```ts
 import { success, error } from "use-server-action/server";
 
-export async function updateUser(id: string, data: UpdateData) {
+export async function updateUserAction(id: string, data: UpdateData) {
     const user = await db.user.findUnique({ where: { id } });
 
     if (!user) {

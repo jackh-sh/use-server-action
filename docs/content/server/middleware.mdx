@@ -1,0 +1,119 @@
+# Middleware
+
+Middleware allows you to wrap server actions with reusable logic like authentication, validation, logging, and more.
+
+```ts
+import {
+    createMiddleware,
+    applyMiddleware,
+    composeMiddleware,
+    withValidation,
+    withLogging,
+} from "use-server-action/server";
+```
+
+## Creating Middleware
+
+Use `createMiddleware` to create a type-safe middleware function:
+
+```ts
+const withAuth = createMiddleware(async (next, ...params) => {
+    const user = await getUser();
+
+    if (!user) {
+        return { ok: false, message: "Unauthorized", code: "UNAUTHORIZED" };
+    }
+
+    // Call next to continue the chain
+    return next(...params);
+});
+```
+
+### Middleware Capabilities
+
+Middleware can:
+
+1. **Short-circuit** - Return early without calling `next`
+2. **Modify parameters** - Transform input before passing to `next`
+3. **Modify results** - Transform the result after calling `next`
+4. **Add side effects** - Logging, analytics, etc.
+
+```ts
+// Example: Modify parameters
+const withTrimmedInput = createMiddleware(async (next, input: string) => {
+    return next(input.trim());
+});
+
+// Example: Modify results
+const withTimestamp = createMiddleware(async (next, ...params) => {
+    const result = await next(...params);
+    if (result.ok) {
+        return {
+            ...result,
+            data: { ...result.data, timestamp: Date.now() },
+        };
+    }
+    return result;
+});
+```
+
+## Applying Middleware
+
+Use `applyMiddleware` to wrap an action with middleware:
+
+```ts
+import { serverAction, applyMiddleware } from "use-server-action/server";
+
+const createPost = serverAction(async (title: string) => {
+    return await db.post.create({ data: { title } });
+});
+
+export const protectedCreatePost = applyMiddleware(createPost, [
+    withAuth,
+    withLogging,
+]);
+```
+
+Middleware executes in order - `withAuth` runs first, then `withLogging`, then the action.
+
+## Composing Middleware
+
+Use `composeMiddleware` to combine multiple middleware into one:
+
+```ts
+const withProtection = composeMiddleware(
+    withAuth,
+    withRateLimit,
+    withLogging
+);
+
+// Use as a single middleware
+export const protectedAction = applyMiddleware(myAction, [withProtection]);
+```
+
+## Built-in Middleware
+
+While use-server-action provides a mechanism to build middleware functions, there are some already provided for use:
+
+- [withLogging](/server/with-logging) - A logger to log server actions
+- [withZodValidation](/server/with-zod-validation) - Validates incoming types against a zod schema.
+
+
+## Execution Order
+
+When applying multiple middleware, they execute in a "wrap" pattern:
+
+```ts
+const wrapped = applyMiddleware(action, [first, second, third]);
+```
+
+Execution flow:
+1. `first` runs (before)
+2. `second` runs (before)
+3. `third` runs (before)
+4. `action` runs
+5. `third` completes (after)
+6. `second` completes (after)
+7. `first` completes (after)
+
+This is similar to how Express middleware or Koa middleware works.

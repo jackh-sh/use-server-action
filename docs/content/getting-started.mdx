@@ -17,7 +17,7 @@ Create a server action using the `serverAction` wrapper. This automatically hand
 
 import { serverAction } from "use-server-action/server";
 
-export const createUser = serverAction(async (name: string) => {
+export const createUserAction = serverAction(async (name: string) => {
     if (!name.trim()) {
         throw new Error("Name is required");
     }
@@ -35,7 +35,7 @@ Use the `useServerAction` hook to execute the action and track its state.
 "use client";
 
 import { useServerAction } from "use-server-action";
-import { createUser } from "../actions";
+import { createUserAction } from "../actions";
 
 export function CreateUserForm() {
     const {
@@ -47,7 +47,7 @@ export function CreateUserForm() {
         isError,
         reset,
     } = useServerAction({
-        action: createUser,
+        action: createUserAction,
         onSuccess: (user) => {
             console.log("User created:", user);
         },
@@ -78,7 +78,7 @@ For more control over error responses, you can use `success()` and `error()` hel
 
 import { success, error } from "use-server-action/server";
 
-export async function deleteUser(id: string) {
+export async function deleteUserAction(id: string) {
     try {
         await db.user.delete({ where: { id } });
         return success({ deleted: true });
@@ -93,7 +93,7 @@ export async function deleteUser(id: string) {
 If you need to await the result directly (e.g., for form handling or chaining actions), use `executeAsync`:
 
 ```tsx
-const { executeAsync } = useServerAction({ action: createUser });
+const { executeAsync } = useServerAction({ action: createUserAction });
 
 async function handleSubmit(formData: FormData) {
     const result = await executeAsync(formData.get("name") as string);
