@@ -1,0 +1,111 @@
+# Getting Started
+
+## Installation
+
+```bash npm2yarn
+npm install use-server-action
+```
+
+## Basic Setup
+
+### 1. Create a Server Action
+
+Create a server action using the `serverAction` wrapper. This automatically handles errors and returns a standardized result.
+
+```ts filename="app/actions.ts"
+"use server";
+
+import { serverAction } from "use-server-action/server";
+
+export const createUser = serverAction(async (name: string) => {
+    if (!name.trim()) {
+        throw new Error("Name is required");
+    }
+
+    const user = await db.user.create({ data: { name } });
+    return user;
+});
+```
+
+### 2. Use in a Client Component
+
+Use the `useServerAction` hook to execute the action and track its state.
+
+```tsx filename="app/components/CreateUserForm.tsx"
+"use client";
+
+import { useServerAction } from "use-server-action";
+import { createUser } from "../actions";
+
+export function CreateUserForm() {
+    const {
+        execute,
+        data,
+        error,
+        isPending,
+        isSuccess,
+        isError,
+        reset,
+    } = useServerAction({
+        action: createUser,
+        onSuccess: (user) => {
+            console.log("User created:", user);
+        },
+        onError: (message, code) => {
+            console.error(`Error [${code}]:`, message);
+        },
+    });
+
+    return (
+        <form action={(formData) => execute(formData.get("name") as string)}>
+            <input name="name" placeholder="Name" disabled={isPending} />
+            <button type="submit" disabled={isPending}>
+                {isPending ? "Creating..." : "Create User"}
+            </button>
+            {isError && <p className="error">{error}</p>}
+            {isSuccess && <p className="success">Created: {data?.name}</p>}
+        </form>
+    );
+}
+```
+
+## Manual Error Handling
+
+For more control over error responses, you can use `success()` and `error()` helpers directly:
+
+```ts filename="app/actions.ts"
+"use server";
+
+import { success, error } from "use-server-action/server";
+
+export async function deleteUser(id: string) {
+    try {
+        await db.user.delete({ where: { id } });
+        return success({ deleted: true });
+    } catch (e) {
+        return error("Failed to delete user", "DELETE_FAILED");
+    }
+}
+```
+
+## Using executeAsync
+
+If you need to await the result directly (e.g., for form handling or chaining actions), use `executeAsync`:
+
+```tsx
+const { executeAsync } = useServerAction({ action: createUser });
+
+async function handleSubmit(formData: FormData) {
+    const result = await executeAsync(formData.get("name") as string);
+
+    if (result.ok) {
+        router.push(`/users/${result.data.id}`);
+    }
+}
+```
+
+## Next Steps
+
+- Learn about [useServerAction](/hook) hook options
+- Explore [server utilities](/server) for creating actions
+- Add [middleware](/middleware) for auth, validation, and logging

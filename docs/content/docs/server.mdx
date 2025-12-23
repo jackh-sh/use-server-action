@@ -1,0 +1,187 @@
+# Server Utilities
+
+Server-side utilities for creating and handling server actions.
+
+```ts
+import {
+    serverAction,
+    success,
+    error,
+    isSuccess,
+    isError,
+    unwrap,
+    unwrapOr,
+} from "use-server-action/server";
+```
+
+## serverAction
+
+Wraps an async function to return a standardized `ServerActionResult`. Automatically catches errors and converts them to error results.
+
+```ts
+import { serverAction } from "use-server-action/server";
+
+export const createUser = serverAction(async (name: string) => {
+    // Just throw errors normally - they'll be caught and converted
+    if (!name.trim()) {
+        throw new Error("Name is required");
+    }
+
+    const user = await db.user.create({ data: { name } });
+    return user; // Automatically wrapped in { ok: true, data: user }
+});
+```
+
+### With Error Callback
+
+```ts
+export const createUser = serverAction(
+    async (name: string) => {
+        const user = await db.user.create({ data: { name } });
+        return user;
+    },
+    {
+        onError: (error) => {
+            // Log errors to your error tracking service
+            console.error("Action failed:", error);
+        },
+    }
+);
+```
+
+## success / error
+
+Helper functions to manually create result objects:
+
+```ts
+import { success, error } from "use-server-action/server";
+
+export async function updateUser(id: string, data: UpdateData) {
+    const user = await db.user.findUnique({ where: { id } });
+
+    if (!user) {
+        return error("User not found", "NOT_FOUND");
+    }
+
+    if (user.email !== data.email) {
+        const existing = await db.user.findUnique({
+            where: { email: data.email }
+        });
+        if (existing) {
+            return error("Email already in use", "DUPLICATE_EMAIL");
+        }
+    }
+
+    const updated = await db.user.update({
+        where: { id },
+        data,
+    });
+
+    return success(updated);
+}
+```
+
+### success(data)
+
+Creates a successful result:
+
+```ts
+success({ id: "1", name: "John" })
+// => { ok: true, data: { id: "1", name: "John" } }
+```
+
+### error(message, code?)
+
+Creates an error result:
+
+```ts
+error("Not found", "NOT_FOUND")
+// => { ok: false, message: "Not found", code: "NOT_FOUND" }
+
+error("Something went wrong")
+// => { ok: false, message: "Something went wrong" }
+```
+
+## Type Guards
+
+### isSuccess / isError
+
+Type guards for narrowing result types:
+
+```ts
+import { isSuccess, isError } from "use-server-action/server";
+
+const result = await myAction(input);
+
+if (isSuccess(result)) {
+    // TypeScript knows result.data exists
+    console.log(result.data);
+}
+
+if (isError(result)) {
+    // TypeScript knows result.message exists
+    console.log(result.message, result.code);
+}
+```
+
+## Unwrap Utilities
+
+### unwrap(result)
+
+Extracts data from a successful result, or throws on error:
+
+```ts
+import { unwrap } from "use-server-action/server";
+
+try {
+    const user = unwrap(await createUser("John"));
+    console.log(user); // The user data
+} catch (e) {
+    // Thrown if result was an error
+    console.error(e.message);
+}
+```
+
+### unwrapOr(result, defaultValue)
+
+Extracts data from a successful result, or returns a default value:
+
+```ts
+import { unwrapOr } from "use-server-action/server";
+
+const user = unwrapOr(await getUser(id), null);
+// Returns the user if successful, or null if error
+
+const count = unwrapOr(await getCount(), 0);
+// Returns the count if successful, or 0 if error
+```
+
+## Combining Actions
+
+You can call server actions from other server actions:
+
+```ts
+export const createUserWithProfile = serverAction(async (data: CreateUserData) => {
+    // Create the user
+    const userResult = await createUser(data.name);
+    if (!userResult.ok) {
+        return userResult; // Forward the error
+    }
+
+    // Create the profile
+    const profileResult = await createProfile({
+        userId: userResult.data.id,
+        bio: data.bio,
+    });
+    if (!profileResult.ok) {
+        // Rollback or handle error
+        await deleteUser(userResult.data.id);
+        return error("Failed to create profile", "PROFILE_ERROR");
+    }
+
+    return success({
+        user: userResult.data,
+        profile: profileResult.data,
+    });
+});
+```

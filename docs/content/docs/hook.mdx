@@ -1,0 +1,144 @@
+# useServerAction
+
+The `useServerAction` hook provides a type-safe way to execute server actions with automatic state management.
+
+```ts
+import { useServerAction } from "use-server-action";
+```
+
+## Basic Usage
+
+```tsx
+const { execute, data, error, isPending } = useServerAction({
+    action: myServerAction,
+});
+```
+
+## Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `action` | `(...args) => Promise<ServerActionResult<T>>` | The server action to execute (required) |
+| `onSuccess` | `(data: T) => void` | Called when the action succeeds |
+| `onError` | `(message: string, code?: string) => void` | Called when the action fails |
+| `onSettled` | `() => void` | Called when the action completes (success or error) |
+
+## Return Values
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `execute` | `(...args) => void` | Execute the action (wrapped in React transition) |
+| `executeAsync` | `(...args) => Promise<ServerActionResult<T>>` | Execute and return the result directly |
+| `data` | `T \| null` | Data from the last successful execution |
+| `error` | `string \| null` | Error message from the last failed execution |
+| `errorCode` | `string \| null` | Error code from the last failed execution |
+| `isPending` | `boolean` | Whether the action is currently executing |
+| `isSuccess` | `boolean` | Whether the last execution succeeded |
+| `isError` | `boolean` | Whether the last execution failed |
+| `reset` | `() => void` | Reset all state to initial values |
+
+## Examples
+
+### With Callbacks
+
+```tsx
+const { execute } = useServerAction({
+    action: createUser,
+    onSuccess: (user) => {
+        toast.success(`Created ${user.name}!`);
+        router.push(`/users/${user.id}`);
+    },
+    onError: (message, code) => {
+        if (code === "DUPLICATE_EMAIL") {
+            toast.error("Email already exists");
+        } else {
+            toast.error(message);
+        }
+    },
+    onSettled: () => {
+        // Runs after success or error
+        setIsOpen(false);
+    },
+});
+```
+
+### Using executeAsync
+
+When you need to await the result:
+
+```tsx
+const { executeAsync } = useServerAction({ action: createUser });
+
+async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+
+    const result = await executeAsync({ name, email });
+
+    if (result.ok) {
+        // Navigate on success
+        router.push(`/users/${result.data.id}`);
+    } else {
+        // Handle specific error codes
+        if (result.code === "VALIDATION_ERROR") {
+            setFieldErrors(result.message);
+        }
+    }
+}
+```
+
+### Resetting State
+
+```tsx
+const { execute, isSuccess, reset } = useServerAction({
+    action: createUser,
+});
+
+// Reset after showing success message
+useEffect(() => {
+    if (isSuccess) {
+        const timer = setTimeout(reset, 3000);
+        return () => clearTimeout(timer);
+    }
+}, [isSuccess, reset]);
+```
+
+### With Arguments
+
+```tsx
+const { execute } = useServerAction({
+    action: updateUser, // (id: string, data: UserData) => Promise<...>
+});
+
+// Pass arguments to execute
+execute(userId, { name: "New Name", email: "new@email.com" });
+```
+
+### Form Action Pattern
+
+```tsx
+function CreateForm() {
+    const { execute, isPending, error } = useServerAction({
+        action: createItem,
+    });
+
+    return (
+        <form action={(formData) => {
+            const name = formData.get("name") as string;
+            execute(name);
+        }}>
+            <input name="name" disabled={isPending} />
+            <button disabled={isPending}>
+                {isPending ? "Creating..." : "Create"}
+            </button>
+            {error && <p className="text-red-500">{error}</p>}
+        </form>
+    );
+}
+```
+
+## How It Works
+
+- `execute` uses React's `useTransition` internally, so UI updates are non-blocking
+- `executeAsync` does not use transitions, allowing you to await the result
+- Function references are stable (memoized with `useCallback`)
+- State updates are prevented after component unmount

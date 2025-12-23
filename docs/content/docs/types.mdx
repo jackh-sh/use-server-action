@@ -1,0 +1,208 @@
+# Type Reference
+
+All TypeScript types exported by the library.
+
+## Core Types
+
+### ServerActionResult
+
+The standard result type returned by all server actions:
+
+```ts
+type ServerActionResult<T> =
+    | ServerActionSuccess<T>
+    | ServerActionError;
+```
+
+### ServerActionSuccess
+
+A successful result containing data:
+
+```ts
+type ServerActionSuccess<T> = {
+    ok: true;
+    data: T;
+};
+```
+
+### ServerActionError
+
+An error result containing a message and optional code:
+
+```ts
+type ServerActionError = {
+    ok: false;
+    message: string;
+    code?: string;
+};
+```
+
+### ServerActionFn
+
+The type signature for a server action function:
+
+```ts
+type ServerActionFn<P extends unknown[], T> = (
+    ...args: P
+) => Promise<ServerActionResult<T>>;
+```
+
+## Hook Types
+
+### UseServerActionInput
+
+Options for the `useServerAction` hook:
+
+```ts
+type UseServerActionInput<P extends unknown[], T> = {
+    action: (...args: P) => Promise<ServerActionResult<T>>;
+    onSuccess?: (data: T) => void;
+    onError?: (message: string, code?: string) => void;
+    onSettled?: () => void;
+};
+```
+
+### UseServerActionReturn
+
+Return type of the `useServerAction` hook:
+
+```ts
+type UseServerActionReturn<P extends unknown[], T> = {
+    isPending: boolean;
+    error: string | null;
+    errorCode: string | null;
+    data: T | null;
+    isSuccess: boolean;
+    isError: boolean;
+    execute: (...args: P) => void;
+    executeAsync: (...args: P) => Promise<ServerActionResult<T>>;
+    reset: () => void;
+};
+```
+
+## Middleware Types
+
+### Middleware
+
+The type signature for a middleware function:
+
+```ts
+type Middleware<P extends unknown[], T> = (
+    next: (...params: P) => Promise<ServerActionResult<T>>,
+    ...params: P
+) => Promise<ServerActionResult<T>>;
+```
+
+### ValidationSchema
+
+The interface for validation schemas (compatible with Zod):
+
+```ts
+type ValidationSchema<T> = {
+    safeParse(data: unknown):
+        | { success: true; data: T }
+        | {
+              success: false;
+              error: {
+                  message?: string;
+                  errors?: Array<{ message: string }>;
+              };
+          };
+};
+```
+
+### WithValidationOptions
+
+Options for the `withValidation` middleware:
+
+```ts
+type WithValidationOptions = {
+    code?: string;
+    formatError?: (error: {
+        message?: string;
+        errors?: Array<{ message: string }>;
+    }) => string;
+};
+```
+
+## Usage Examples
+
+### Typing Actions
+
+```ts
+import type { ServerActionResult } from "use-server-action";
+
+type User = {
+    id: string;
+    name: string;
+    email: string;
+};
+
+// Explicitly typed action
+async function createUser(
+    name: string,
+    email: string
+): Promise<ServerActionResult<User>> {
+    // ...
+}
+```
+
+### Typing Middleware
+
+```ts
+import type { Middleware } from "use-server-action/server";
+
+type UserInput = { name: string; email: string };
+type User = { id: string; name: string; email: string };
+
+// Explicitly typed middleware
+const myMiddleware: Middleware<[UserInput], User> = async (next, input) => {
+    // Transform input
+    const normalized = {
+        name: input.name.trim(),
+        email: input.email.toLowerCase(),
+    };
+    return next(normalized);
+};
+```
+
+### Inferring Types from Zod
+
+```ts
+import { z } from "zod";
+import type { ServerActionResult } from "use-server-action";
+
+const UserSchema = z.object({
+    name: z.string(),
+    email: z.string().email(),
+});
+
+type UserInput = z.infer<typeof UserSchema>;
+// => { name: string; email: string }
+
+type UserOutput = z.output<typeof UserSchema>;
+// => { name: string; email: string }
+```
+
+## Importing Types
+
+Types can be imported from the main package or the server subpath:
+
+```ts
+// From main package (client-safe)
+import type {
+    ServerActionResult,
+    ServerActionSuccess,
+    ServerActionError,
+    UseServerActionInput,
+    UseServerActionReturn,
+} from "use-server-action";
+
+// From server subpath
+import type {
+    ServerActionResult,
+    ServerActionFn,
+    Middleware,
+    ValidationSchema,
+} from "use-server-action/server";
+```

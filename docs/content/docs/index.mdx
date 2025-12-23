@@ -1,0 +1,67 @@
+# use-server-action
+
+A type-safe React hook and utilities for working with Next.js server actions.
+
+## Features
+
+- **Type-safe** - Full TypeScript support with inferred types
+- **Simple API** - Easy to use hook with loading, error, and success states
+- **Middleware** - Composable middleware system for auth, validation, logging
+- **Zod Integration** - Built-in validation middleware (Zod optional)
+- **Lightweight** - No dependencies beyond React
+
+## Quick Example
+
+```tsx
+// Server action
+import { serverAction } from "use-server-action/server";
+
+export const createUser = serverAction(async (name: string) => {
+    return await db.user.create({ data: { name } });
+});
+```
+
+```tsx
+// Client component
+import { useServerAction } from "use-server-action";
+import { createUser } from "./actions";
+
+function CreateUserForm() {
+    const { execute, isPending, isSuccess, error } = useServerAction({
+        action: createUser,
+    });
+
+    return (
+        <form action={(fd) => execute(fd.get("name") as string)}>
+            <input name="name" disabled={isPending} />
+            <button disabled={isPending}>
+                {isPending ? "Creating..." : "Create"}
+            </button>
+            {error && <p className="error">{error}</p>}
+        </form>
+    );
+}
+```
+
+## Installation
+
+```bash npm2yarn
+npm install use-server-action
+```
+
+## Imports
+
+```ts
+// Client-side hook
+import { useServerAction } from "use-server-action";
+
+// Server-side utilities
+import { serverAction, success, error } from "use-server-action/server";
+
+// Middleware
+import {
+    createMiddleware,
+    applyMiddleware,
+    withValidation
+} from "use-server-action/server";
+```
