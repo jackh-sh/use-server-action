@@ -19,12 +19,15 @@ const banner = (
 const navbar = (
     <Navbar
         logo={<strong>use-server-action</strong>}
-        projectLink="https://github.com/your-username/use-server-action"
+        projectLink="https://github.com/jackh-sh/use-server-action"
     />
 );
 
 const footer = (
-    <Footer>MIT {new Date().getFullYear()} © use-server-action</Footer>
+    <Footer>
+        MIT {new Date().getFullYear()} ©{" "}
+        <a href="https://jackh.sh">jackh.sh</a>
+    </Footer>
 );
 
 export default async function RootLayout({

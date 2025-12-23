@@ -8,5 +8,6 @@ const withNextra = nextra({
 });
 
 export default withNextra({
+    output: "standalone", // important for cloudflare
     reactStrictMode: true,
 });
