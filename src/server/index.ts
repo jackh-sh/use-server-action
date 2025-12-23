@@ -13,3 +13,11 @@ export type {
     ServerActionError,
     ServerActionFn,
 } from "./server-action";
+
+export {
+    createMiddleware,
+    applyMiddleware,
+    composeMiddleware,
+    withLogging,
+} from "./middleware";
+export type { Middleware } from "./middleware";

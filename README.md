@@ -161,12 +161,80 @@ const data = unwrap(result);
 const data = unwrapOr(result, defaultValue);
 ```
 
+## Middleware
+
+Middleware allows you to wrap server actions with reusable logic like authentication, logging, or validation.
+
+### `createMiddleware(handler)`
+
+Creates a type-safe middleware function:
+
+```ts
+import { createMiddleware, applyMiddleware } from "use-server-action/server";
+
+const withAuth = createMiddleware(async (next, ...params) => {
+    const user = await getUser();
+    if (!user) {
+        return { ok: false, message: "Unauthorized", code: "UNAUTHORIZED" };
+    }
+    return next(...params);
+});
+```
+
+### `applyMiddleware(action, middleware[])`
+
+Applies middleware to a server action. Middleware executes in order (first wraps second, etc):
+
+```ts
+import { serverAction, applyMiddleware } from "use-server-action/server";
+
+const createPost = serverAction(async (title: string) => {
+    return await db.post.create({ data: { title } });
+});
+
+export const protectedCreatePost = applyMiddleware(createPost, [
+    withAuth,
+    withLogging,
+]);
+```
+
+### `composeMiddleware(...middleware)`
+
+Composes multiple middleware into a single middleware:
+
+```ts
+import { composeMiddleware } from "use-server-action/server";
+
+const withProtection = composeMiddleware(withAuth, withRateLimit, withLogging);
+
+export const protectedAction = applyMiddleware(myAction, [withProtection]);
+```
+
+### `withLogging(options)`
+
+Built-in logging middleware:
+
+```ts
+import { withLogging } from "use-server-action/server";
+
+const logger = withLogging({
+    onCall: (params) => console.log("Calling with:", params),
+    onSuccess: (data, params) => console.log("Success:", data),
+    onError: (message, code, params) => console.error("Error:", message),
+});
+```
+
 ## Types
 
 ```ts
 type ServerActionResult<T> =
     | { ok: true; data: T }
     | { ok: false; message: string; code?: string };
+
+type Middleware<P extends unknown[], T> = (
+    next: (...params: P) => Promise<ServerActionResult<T>>,
+    ...params: P
+) => Promise<ServerActionResult<T>>;
 ```
 
 ## License
