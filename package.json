@@ -5,6 +5,10 @@
     "main": "./dist/index.js",
     "module": "./dist/index.mjs",
     "types": "./dist/index.d.ts",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/jackh-sh/use-server-action.git"
+    },
     "exports": {
         ".": {
             "import": {
