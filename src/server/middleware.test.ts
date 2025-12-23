@@ -5,6 +5,8 @@ import {
     composeMiddleware,
     createMiddleware,
     withLogging,
+    withValidation,
+    type ValidationSchema,
 } from "./middleware";
 
 type TestData = { value: string };
@@ -238,6 +240,173 @@ describe("middleware", () => {
             const result = await middleware(action);
 
             expect(result).toEqual({ ok: true, data: { value: "test" } });
+        });
+    });
+
+    describe("withValidation", () => {
+        type UserInput = { name: string; email: string };
+
+        // Mock schema that mimics Zod's safeParse interface
+        const createMockSchema = <T>(
+            validator: (data: unknown) => { valid: boolean; data?: T; message?: string },
+        ): ValidationSchema<T> => ({
+            safeParse: (data: unknown) => {
+                const result = validator(data);
+                if (result.valid) {
+                    return { success: true, data: result.data as T };
+                }
+                return {
+                    success: false,
+                    error: { errors: [{ message: result.message ?? "Invalid" }] },
+                };
+            },
+        });
+
+        const validUserSchema = createMockSchema<UserInput>((data) => {
+            const input = data as UserInput;
+            if (!input.name || input.name.length < 1) {
+                return { valid: false, message: "Name is required" };
+            }
+            if (!input.email || !input.email.includes("@")) {
+                return { valid: false, message: "Invalid email" };
+            }
+            return { valid: true, data: input };
+        });
+
+        it("should pass valid data to next", async () => {
+            const action = vi.fn(
+                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                    return { ok: true, data: { value: input.name } };
+                },
+            );
+
+            const validated = withValidation<UserInput, TestData>(validUserSchema);
+            const result = await validated(action, { name: "John", email: "john@example.com" });
+
+            expect(result).toEqual({ ok: true, data: { value: "John" } });
+            expect(action).toHaveBeenCalledWith({ name: "John", email: "john@example.com" });
+        });
+
+        it("should return error for invalid data", async () => {
+            const action = vi.fn(
+                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                    return { ok: true, data: { value: input.name } };
+                },
+            );
+
+            const validated = withValidation<UserInput, TestData>(validUserSchema);
+            const result = await validated(action, { name: "", email: "john@example.com" });
+
+            expect(result).toEqual({
+                ok: false,
+                message: "Name is required",
+                code: "VALIDATION_ERROR",
+            });
+            expect(action).not.toHaveBeenCalled();
+        });
+
+        it("should use custom error code", async () => {
+            const action = vi.fn(
+                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                    return { ok: true, data: { value: input.name } };
+                },
+            );
+
+            const validated = withValidation<UserInput, TestData>(validUserSchema, {
+                code: "INVALID_INPUT",
+            });
+            const result = await validated(action, { name: "", email: "" });
+
+            expect(result).toEqual({
+                ok: false,
+                message: "Name is required",
+                code: "INVALID_INPUT",
+            });
+        });
+
+        it("should use custom error formatter", async () => {
+            const action = vi.fn(
+                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                    return { ok: true, data: { value: input.name } };
+                },
+            );
+
+            const validated = withValidation<UserInput, TestData>(validUserSchema, {
+                formatError: (error) => `Custom: ${error.errors?.[0]?.message}`,
+            });
+            const result = await validated(action, { name: "", email: "" });
+
+            expect(result).toEqual({
+                ok: false,
+                message: "Custom: Name is required",
+                code: "VALIDATION_ERROR",
+            });
+        });
+
+        it("should work with applyMiddleware", async () => {
+            const action = vi.fn(
+                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                    return { ok: true, data: { value: input.name } };
+                },
+            );
+
+            const wrappedAction = applyMiddleware(action, [
+                withValidation(validUserSchema),
+            ]);
+
+            const validResult = await wrappedAction({ name: "Jane", email: "jane@test.com" });
+            expect(validResult).toEqual({ ok: true, data: { value: "Jane" } });
+
+            const invalidResult = await wrappedAction({ name: "", email: "" });
+            expect(invalidResult.ok).toBe(false);
+        });
+
+        it("should handle schema with message fallback", async () => {
+            const schemaWithMessage: ValidationSchema<string> = {
+                safeParse: () => ({
+                    success: false,
+                    error: { message: "Schema-level error" },
+                }),
+            };
+
+            const action = vi.fn(
+                async (): Promise<ServerActionResult<TestData>> => {
+                    return { ok: true, data: { value: "test" } };
+                },
+            );
+
+            const validated = withValidation<string, TestData>(schemaWithMessage);
+            const result = await validated(action, "any");
+
+            expect(result).toEqual({
+                ok: false,
+                message: "Schema-level error",
+                code: "VALIDATION_ERROR",
+            });
+        });
+
+        it("should fallback to default message", async () => {
+            const schemaWithNoMessage: ValidationSchema<string> = {
+                safeParse: () => ({
+                    success: false,
+                    error: {},
+                }),
+            };
+
+            const action = vi.fn(
+                async (): Promise<ServerActionResult<TestData>> => {
+                    return { ok: true, data: { value: "test" } };
+                },
+            );
+
+            const validated = withValidation<string, TestData>(schemaWithNoMessage);
+            const result = await validated(action, "any");
+
+            expect(result).toEqual({
+                ok: false,
+                message: "Validation failed",
+                code: "VALIDATION_ERROR",
+            });
         });
     });
 

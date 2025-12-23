@@ -210,6 +210,39 @@ const withProtection = composeMiddleware(withAuth, withRateLimit, withLogging);
 export const protectedAction = applyMiddleware(myAction, [withProtection]);
 ```
 
+### `withValidation(schema, options?)`
+
+Validates the input against a Zod-compatible schema. Works with Zod, Valibot, or any library with a `safeParse` method:
+
+```ts
+import { z } from "zod";
+import { withValidation, applyMiddleware, serverAction } from "use-server-action/server";
+
+const CreateUserSchema = z.object({
+    name: z.string().min(1),
+    email: z.string().email(),
+});
+
+const createUser = serverAction(async (input: z.infer<typeof CreateUserSchema>) => {
+    return await db.user.create({ data: input });
+});
+
+export const validatedCreateUser = applyMiddleware(createUser, [
+    withValidation(CreateUserSchema),
+]);
+```
+
+Options:
+- `code` - Error code to return (default: `"VALIDATION_ERROR"`)
+- `formatError` - Custom error message formatter
+
+```ts
+withValidation(schema, {
+    code: "INVALID_INPUT",
+    formatError: (error) => error.errors?.map(e => e.message).join(", ") ?? "Invalid",
+});
+```
+
 ### `withLogging(options)`
 
 Built-in logging middleware:

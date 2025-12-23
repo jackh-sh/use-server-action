@@ -18,6 +18,11 @@ export {
     createMiddleware,
     applyMiddleware,
     composeMiddleware,
+    withValidation,
     withLogging,
 } from "./middleware";
-export type { Middleware } from "./middleware";
+export type {
+    Middleware,
+    ValidationSchema,
+    WithValidationOptions,
+} from "./middleware";

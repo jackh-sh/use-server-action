@@ -78,6 +78,71 @@ export function composeMiddleware<P extends unknown[], T>(
 }
 
 /**
+ * A Zod-like schema interface for validation.
+ * Works with Zod, Valibot, or any schema library with a compatible safeParse method.
+ */
+export type ValidationSchema<T> = {
+    safeParse(data: unknown):
+        | { success: true; data: T }
+        | { success: false; error: { message?: string; errors?: Array<{ message: string }> } };
+};
+
+export type WithValidationOptions = {
+    /** Error code to return on validation failure. Defaults to "VALIDATION_ERROR" */
+    code?: string;
+    /** Custom error message formatter */
+    formatError?: (error: {
+        message?: string;
+        errors?: Array<{ message: string }>;
+    }) => string;
+};
+
+/**
+ * Creates a middleware that validates the first parameter against a schema.
+ * Works with Zod, Valibot, or any library with a compatible safeParse method.
+ *
+ * @example
+ * ```ts
+ * import { z } from "zod";
+ * import { withValidation, applyMiddleware } from "use-server-action/server";
+ *
+ * const CreateUserSchema = z.object({
+ *     name: z.string().min(1),
+ *     email: z.string().email(),
+ * });
+ *
+ * const createUser = applyMiddleware(
+ *     serverAction(async (input: z.infer<typeof CreateUserSchema>) => {
+ *         return await db.user.create({ data: input });
+ *     }),
+ *     [withValidation(CreateUserSchema)]
+ * );
+ * ```
+ */
+export function withValidation<TInput, T>(
+    schema: ValidationSchema<TInput>,
+    options: WithValidationOptions = {},
+): Middleware<[TInput], T> {
+    const { code = "VALIDATION_ERROR", formatError } = options;
+
+    return async (next, input) => {
+        const result = schema.safeParse(input);
+
+        if (!result.success) {
+            const message = formatError
+                ? formatError(result.error)
+                : result.error.errors?.[0]?.message ??
+                  result.error.message ??
+                  "Validation failed";
+
+            return { ok: false, message, code };
+        }
+
+        return next(result.data);
+    };
+}
+
+/**
  * Creates a middleware that logs action calls and results.
  */
 export function withLogging<P extends unknown[], T>(
