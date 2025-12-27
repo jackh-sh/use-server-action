@@ -5,8 +5,11 @@ import {
     composeMiddleware,
     createMiddleware,
     withLogging,
-    withValidation,
+    withZodValidation,
+    createAction,
+    createContextMiddleware,
     type ValidationSchema,
+    type ContextMiddleware,
 } from "./middleware";
 
 type TestData = { value: string };
@@ -47,7 +50,9 @@ describe("middleware", () => {
             );
 
             const action = vi.fn(
-                async (input: string): Promise<ServerActionResult<TestData>> => {
+                async (
+                    input: string,
+                ): Promise<ServerActionResult<TestData>> => {
                     return { ok: true, data: { value: input } };
                 },
             );
@@ -61,7 +66,11 @@ describe("middleware", () => {
             const middleware = createMiddleware<[string], TestData>(
                 async (next, input) => {
                     if (input === "blocked") {
-                        return { ok: false, message: "Blocked", code: "BLOCKED" };
+                        return {
+                            ok: false,
+                            message: "Blocked",
+                            code: "BLOCKED",
+                        };
                     }
                     return next(input);
                 },
@@ -70,7 +79,11 @@ describe("middleware", () => {
             const action = createSuccessAction({ value: "test" });
             const result = await middleware(action, "blocked");
 
-            expect(result).toEqual({ ok: false, message: "Blocked", code: "BLOCKED" });
+            expect(result).toEqual({
+                ok: false,
+                message: "Blocked",
+                code: "BLOCKED",
+            });
             expect(action).not.toHaveBeenCalled();
         });
 
@@ -89,7 +102,10 @@ describe("middleware", () => {
             const action = createSuccessAction({ value: "original" });
             const result = await middleware(action);
 
-            expect(result).toEqual({ ok: true, data: { value: "original_modified" } });
+            expect(result).toEqual({
+                ok: true,
+                data: { value: "original_modified" },
+            });
         });
     });
 
@@ -104,10 +120,12 @@ describe("middleware", () => {
                 return result;
             });
 
-            const action = vi.fn(async (): Promise<ServerActionResult<TestData>> => {
-                callOrder.push("action");
-                return { ok: true, data: { value: "test" } };
-            });
+            const action = vi.fn(
+                async (): Promise<ServerActionResult<TestData>> => {
+                    callOrder.push("action");
+                    return { ok: true, data: { value: "test" } };
+                },
+            );
 
             const wrapped = applyMiddleware(action, [middleware]);
             await wrapped();
@@ -136,10 +154,12 @@ describe("middleware", () => {
                 return result;
             });
 
-            const action = vi.fn(async (): Promise<ServerActionResult<TestData>> => {
-                callOrder.push("action");
-                return { ok: true, data: { value: "test" } };
-            });
+            const action = vi.fn(
+                async (): Promise<ServerActionResult<TestData>> => {
+                    callOrder.push("action");
+                    return { ok: true, data: { value: "test" } };
+                },
+            );
 
             const wrapped = applyMiddleware(action, [first, second]);
             await wrapped();
@@ -172,7 +192,10 @@ describe("middleware", () => {
             const wrapped = applyMiddleware(action, [middleware]);
             const result = await wrapped("test", 5);
 
-            expect(result).toEqual({ ok: true, data: { value: "test_modified:6" } });
+            expect(result).toEqual({
+                ok: true,
+                data: { value: "test_modified:6" },
+            });
         });
     });
 
@@ -202,7 +225,9 @@ describe("middleware", () => {
     describe("withLogging", () => {
         it("should call onCall with params", async () => {
             const onCall = vi.fn();
-            const middleware = withLogging<[string, number], TestData>({ onCall });
+            const middleware = withLogging<[string, number], TestData>({
+                onCall,
+            });
             const action = createSuccessAction({ value: "test" });
 
             await middleware(action, "hello", 42);
@@ -217,7 +242,9 @@ describe("middleware", () => {
 
             await middleware(action, "input");
 
-            expect(onSuccess).toHaveBeenCalledWith({ value: "test" }, ["input"]);
+            expect(onSuccess).toHaveBeenCalledWith({ value: "test" }, [
+                "input",
+            ]);
         });
 
         it("should call onError for error results", async () => {
@@ -248,7 +275,11 @@ describe("middleware", () => {
 
         // Mock schema that mimics Zod's safeParse interface
         const createMockSchema = <T>(
-            validator: (data: unknown) => { valid: boolean; data?: T; message?: string },
+            validator: (data: unknown) => {
+                valid: boolean;
+                data?: T;
+                message?: string;
+            },
         ): ValidationSchema<T> => ({
             safeParse: (data: unknown) => {
                 const result = validator(data);
@@ -257,7 +288,9 @@ describe("middleware", () => {
                 }
                 return {
                     success: false,
-                    error: { errors: [{ message: result.message ?? "Invalid" }] },
+                    error: {
+                        errors: [{ message: result.message ?? "Invalid" }],
+                    },
                 };
             },
         });
@@ -275,27 +308,44 @@ describe("middleware", () => {
 
         it("should pass valid data to next", async () => {
             const action = vi.fn(
-                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                async (
+                    input: UserInput,
+                ): Promise<ServerActionResult<TestData>> => {
                     return { ok: true, data: { value: input.name } };
                 },
             );
 
-            const validated = withValidation<UserInput, TestData>(validUserSchema);
-            const result = await validated(action, { name: "John", email: "john@example.com" });
+            const validated = withZodValidation<UserInput, TestData>(
+                validUserSchema,
+            );
+            const result = await validated(action, {
+                name: "John",
+                email: "john@example.com",
+            });
 
             expect(result).toEqual({ ok: true, data: { value: "John" } });
-            expect(action).toHaveBeenCalledWith({ name: "John", email: "john@example.com" });
+            expect(action).toHaveBeenCalledWith({
+                name: "John",
+                email: "john@example.com",
+            });
         });
 
         it("should return error for invalid data", async () => {
             const action = vi.fn(
-                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                async (
+                    input: UserInput,
+                ): Promise<ServerActionResult<TestData>> => {
                     return { ok: true, data: { value: input.name } };
                 },
             );
 
-            const validated = withValidation<UserInput, TestData>(validUserSchema);
-            const result = await validated(action, { name: "", email: "john@example.com" });
+            const validated = withZodValidation<UserInput, TestData>(
+                validUserSchema,
+            );
+            const result = await validated(action, {
+                name: "",
+                email: "john@example.com",
+            });
 
             expect(result).toEqual({
                 ok: false,
@@ -307,14 +357,19 @@ describe("middleware", () => {
 
         it("should use custom error code", async () => {
             const action = vi.fn(
-                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                async (
+                    input: UserInput,
+                ): Promise<ServerActionResult<TestData>> => {
                     return { ok: true, data: { value: input.name } };
                 },
             );
 
-            const validated = withValidation<UserInput, TestData>(validUserSchema, {
-                code: "INVALID_INPUT",
-            });
+            const validated = withZodValidation<UserInput, TestData>(
+                validUserSchema,
+                {
+                    code: "INVALID_INPUT",
+                },
+            );
             const result = await validated(action, { name: "", email: "" });
 
             expect(result).toEqual({
@@ -326,14 +381,20 @@ describe("middleware", () => {
 
         it("should use custom error formatter", async () => {
             const action = vi.fn(
-                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                async (
+                    input: UserInput,
+                ): Promise<ServerActionResult<TestData>> => {
                     return { ok: true, data: { value: input.name } };
                 },
             );
 
-            const validated = withValidation<UserInput, TestData>(validUserSchema, {
-                formatError: (error) => `Custom: ${error.errors?.[0]?.message}`,
-            });
+            const validated = withZodValidation<UserInput, TestData>(
+                validUserSchema,
+                {
+                    formatError: (error) =>
+                        `Custom: ${error.errors?.[0]?.message}`,
+                },
+            );
             const result = await validated(action, { name: "", email: "" });
 
             expect(result).toEqual({
@@ -345,16 +406,21 @@ describe("middleware", () => {
 
         it("should work with applyMiddleware", async () => {
             const action = vi.fn(
-                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                async (
+                    input: UserInput,
+                ): Promise<ServerActionResult<TestData>> => {
                     return { ok: true, data: { value: input.name } };
                 },
             );
 
             const wrappedAction = applyMiddleware(action, [
-                withValidation(validUserSchema),
+                withZodValidation(validUserSchema),
             ]);
 
-            const validResult = await wrappedAction({ name: "Jane", email: "jane@test.com" });
+            const validResult = await wrappedAction({
+                name: "Jane",
+                email: "jane@test.com",
+            });
             expect(validResult).toEqual({ ok: true, data: { value: "Jane" } });
 
             const invalidResult = await wrappedAction({ name: "", email: "" });
@@ -375,7 +441,9 @@ describe("middleware", () => {
                 },
             );
 
-            const validated = withValidation<string, TestData>(schemaWithMessage);
+            const validated = withZodValidation<string, TestData>(
+                schemaWithMessage,
+            );
             const result = await validated(action, "any");
 
             expect(result).toEqual({
@@ -399,7 +467,9 @@ describe("middleware", () => {
                 },
             );
 
-            const validated = withValidation<string, TestData>(schemaWithNoMessage);
+            const validated = withZodValidation<string, TestData>(
+                schemaWithNoMessage,
+            );
             const result = await validated(action, "any");
 
             expect(result).toEqual({
@@ -412,14 +482,19 @@ describe("middleware", () => {
 
     describe("integration", () => {
         it("should work with serverAction-style functions", async () => {
-            const authMiddleware = createMiddleware<[{ token: string }], TestData>(
-                async (next, params) => {
-                    if (params.token !== "valid") {
-                        return { ok: false, message: "Unauthorized", code: "UNAUTHORIZED" };
-                    }
-                    return next(params);
-                },
-            );
+            const authMiddleware = createMiddleware<
+                [{ token: string }],
+                TestData
+            >(async (next, params) => {
+                if (params.token !== "valid") {
+                    return {
+                        ok: false,
+                        message: "Unauthorized",
+                        code: "UNAUTHORIZED",
+                    };
+                }
+                return next(params);
+            });
 
             const action = vi.fn(
                 async (params: {
@@ -447,6 +522,343 @@ describe("middleware", () => {
                 data: { value: "protected data" },
             });
             expect(action).toHaveBeenCalledWith({ token: "valid" });
+        });
+    });
+
+    describe("context-aware middleware", () => {
+        type User = { id: string; name: string };
+        type Database = { query: (sql: string) => string };
+
+        describe("createContextMiddleware", () => {
+            it("should create a context middleware function", async () => {
+                const middleware = createContextMiddleware<
+                    [string],
+                    TestData,
+                    {},
+                    { user: User }
+                >(async (next, ctx, input) => {
+                    return next(
+                        { ...ctx, user: { id: "1", name: "John" } },
+                        input,
+                    );
+                });
+
+                const action = vi.fn(
+                    async (
+                        ctx: { user: User },
+                        input: string,
+                    ): Promise<ServerActionResult<TestData>> => {
+                        return { ok: true, data: { value: ctx.user.name } };
+                    },
+                );
+
+                const result = await middleware(action, {}, "test");
+                expect(result).toEqual({ ok: true, data: { value: "John" } });
+            });
+
+            it("should allow short-circuiting", async () => {
+                const middleware = createContextMiddleware<
+                    [string],
+                    TestData,
+                    {},
+                    { user: User }
+                >(async (next, ctx, input) => {
+                    if (input === "blocked") {
+                        return {
+                            ok: false,
+                            message: "Blocked",
+                            code: "BLOCKED",
+                        };
+                    }
+                    return next(
+                        { ...ctx, user: { id: "1", name: "John" } },
+                        input,
+                    );
+                });
+
+                const action = vi.fn(
+                    async (
+                        ctx: { user: User },
+                        input: string,
+                    ): Promise<ServerActionResult<TestData>> => {
+                        return { ok: true, data: { value: ctx.user.name } };
+                    },
+                );
+
+                const result = await middleware(action, {}, "blocked");
+                expect(result).toEqual({
+                    ok: false,
+                    message: "Blocked",
+                    code: "BLOCKED",
+                });
+                expect(action).not.toHaveBeenCalled();
+            });
+        });
+
+        describe("createAction", () => {
+            it("should build action with no middleware", async () => {
+                const action = createAction<[string], TestData>(
+                    async (ctx, input) => {
+                        return { ok: true, data: { value: input } };
+                    },
+                ).build();
+
+                const result = await action("hello");
+                expect(result).toEqual({ ok: true, data: { value: "hello" } });
+            });
+
+            it("should pass context from middleware to action", async () => {
+                const withAuth = createContextMiddleware<
+                    [string],
+                    TestData,
+                    {},
+                    { user: User }
+                >(async (next, ctx, input) => {
+                    const user = { id: "123", name: "Alice" };
+                    return next({ ...ctx, user }, input);
+                });
+
+                const action = createAction<[string], TestData, { user: User }>(
+                    async (ctx, input) => {
+                        return {
+                            ok: true,
+                            data: { value: `${ctx.user.name}: ${input}` },
+                        };
+                    },
+                )
+                    .use(withAuth)
+                    .build();
+
+                const result = await action("hello");
+                expect(result).toEqual({
+                    ok: true,
+                    data: { value: "Alice: hello" },
+                });
+            });
+
+            it("should accumulate context through multiple middleware", async () => {
+                const withAuth = createContextMiddleware<
+                    [string],
+                    TestData,
+                    {},
+                    { user: User }
+                >(async (next, ctx, input) => {
+                    return next(
+                        { ...ctx, user: { id: "1", name: "Bob" } },
+                        input,
+                    );
+                });
+
+                const withDb = createContextMiddleware<
+                    [string],
+                    TestData,
+                    { user: User },
+                    { db: Database }
+                >(async (next, ctx, input) => {
+                    const db = {
+                        query: (sql: string) =>
+                            `Result for ${sql} by ${ctx.user.name}`,
+                    };
+                    return next({ ...ctx, db }, input);
+                });
+
+                const action = createAction<
+                    [string],
+                    TestData,
+                    { user: User; db: Database }
+                >(async (ctx, input) => {
+                    return { ok: true, data: { value: ctx.db.query(input) } };
+                })
+                    .use(withAuth)
+                    .use(withDb)
+                    .build();
+
+                const result = await action("SELECT * FROM users");
+                expect(result).toEqual({
+                    ok: true,
+                    data: { value: "Result for SELECT * FROM users by Bob" },
+                });
+            });
+
+            it("should execute middleware in correct order", async () => {
+                const callOrder: string[] = [];
+
+                const first = createContextMiddleware<
+                    [],
+                    TestData,
+                    {},
+                    { first: true }
+                >(async (next, ctx) => {
+                    callOrder.push("first:before");
+                    const result = await next({ ...ctx, first: true as const });
+                    callOrder.push("first:after");
+                    return result;
+                });
+
+                const second = createContextMiddleware<
+                    [],
+                    TestData,
+                    { first: true },
+                    { second: true }
+                >(async (next, ctx) => {
+                    callOrder.push("second:before");
+                    const result = await next({
+                        ...ctx,
+                        second: true as const,
+                    });
+                    callOrder.push("second:after");
+                    return result;
+                });
+
+                const action = createAction<
+                    [],
+                    TestData,
+                    { first: true; second: true }
+                >(async (ctx) => {
+                    callOrder.push("action");
+                    return { ok: true, data: { value: "done" } };
+                })
+                    .use(first)
+                    .use(second)
+                    .build();
+
+                await action();
+
+                expect(callOrder).toEqual([
+                    "first:before",
+                    "second:before",
+                    "action",
+                    "second:after",
+                    "first:after",
+                ]);
+            });
+
+            it("should allow middleware to short-circuit", async () => {
+                const withAuth = createContextMiddleware<
+                    [{ token: string }],
+                    TestData,
+                    {},
+                    { user: User }
+                >(async (next, ctx, params) => {
+                    if (params.token !== "valid") {
+                        return {
+                            ok: false,
+                            message: "Unauthorized",
+                            code: "UNAUTHORIZED",
+                        };
+                    }
+                    return next(
+                        { ...ctx, user: { id: "1", name: "Auth User" } },
+                        params,
+                    );
+                });
+
+                const actionFn = vi.fn(
+                    async (
+                        ctx: { user: User },
+                        params: { token: string },
+                    ): Promise<ServerActionResult<TestData>> => {
+                        return { ok: true, data: { value: ctx.user.name } };
+                    },
+                );
+
+                const action = createAction<
+                    [{ token: string }],
+                    TestData,
+                    { user: User }
+                >(actionFn)
+                    .use(withAuth)
+                    .build();
+
+                // Invalid token should short-circuit
+                const failResult = await action({ token: "invalid" });
+                expect(failResult).toEqual({
+                    ok: false,
+                    message: "Unauthorized",
+                    code: "UNAUTHORIZED",
+                });
+                expect(actionFn).not.toHaveBeenCalled();
+
+                // Valid token should reach action
+                const successResult = await action({ token: "valid" });
+                expect(successResult).toEqual({
+                    ok: true,
+                    data: { value: "Auth User" },
+                });
+                expect(actionFn).toHaveBeenCalled();
+            });
+
+            it("should allow middleware to modify parameters", async () => {
+                const withTransform = createContextMiddleware<
+                    [string, number],
+                    TestData,
+                    {},
+                    {}
+                >(async (next, ctx, str, num) => {
+                    return next(ctx, str.toUpperCase(), num * 2);
+                });
+
+                const action = createAction<[string, number], TestData>(
+                    async (ctx, str, num) => {
+                        return { ok: true, data: { value: `${str}:${num}` } };
+                    },
+                )
+                    .use(withTransform)
+                    .build();
+
+                const result = await action("hello", 5);
+                expect(result).toEqual({
+                    ok: true,
+                    data: { value: "HELLO:10" },
+                });
+            });
+
+            it("should allow middleware to access context from previous middleware", async () => {
+                const withUser = createContextMiddleware<
+                    [],
+                    TestData,
+                    {},
+                    { userId: string }
+                >(async (next, ctx) => {
+                    return next({ ...ctx, userId: "user-123" });
+                });
+
+                const withPermissions = createContextMiddleware<
+                    [],
+                    TestData,
+                    { userId: string },
+                    { permissions: string[] }
+                >(async (next, ctx) => {
+                    // Access userId from previous middleware
+                    const permissions =
+                        ctx.userId === "user-123"
+                            ? ["read", "write"]
+                            : ["read"];
+                    return next({ ...ctx, permissions });
+                });
+
+                const action = createAction<
+                    [],
+                    TestData,
+                    { userId: string; permissions: string[] }
+                >(async (ctx) => {
+                    return {
+                        ok: true,
+                        data: {
+                            value: `${ctx.userId}: ${ctx.permissions.join(",")}`,
+                        },
+                    };
+                })
+                    .use(withUser)
+                    .use(withPermissions)
+                    .build();
+
+                const result = await action();
+                expect(result).toEqual({
+                    ok: true,
+                    data: { value: "user-123: read,write" },
+                });
+            });
         });
     });
 });

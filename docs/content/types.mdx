@@ -113,7 +113,7 @@ type ValidationSchema<T> = {
 
 ### WithValidationOptions
 
-Options for the `withValidation` middleware:
+Options for the `withZodValidation` middleware:
 
 ```ts
 type WithValidationOptions = {
@@ -124,6 +124,40 @@ type WithValidationOptions = {
     }) => string;
 };
 ```
+
+## Context-Aware Middleware Types
+
+### BaseContext
+
+The base type for all context objects:
+
+```ts
+type BaseContext = Record<string, unknown>;
+```
+
+### ContextMiddleware
+
+A middleware function that receives and can add to a shared context:
+
+```ts
+type ContextMiddleware<
+    P extends unknown[],           // Action parameters
+    T,                              // Return type
+    CtxIn extends BaseContext,     // Required input context
+    CtxOut extends BaseContext,    // Context this middleware adds
+> = (
+    next: (ctx: CtxIn & CtxOut, ...params: P) => Promise<ServerActionResult<T>>,
+    ctx: CtxIn,
+    ...params: P
+) => Promise<ServerActionResult<T>>;
+```
+
+**Type Parameters:**
+
+- `P` - The parameter types the action accepts
+- `T` - The return data type of the action
+- `CtxIn` - The context type this middleware expects to receive from previous middleware
+- `CtxOut` - The context type this middleware adds for downstream middleware/action
 
 ## Usage Examples
 
@@ -166,6 +200,43 @@ const myMiddleware: Middleware<[UserInput], User> = async (next, input) => {
 };
 ```
 
+### Typing Context Middleware
+
+```ts
+import type { ContextMiddleware } from "use-server-action/server";
+
+type User = { id: string; name: string };
+type Post = { id: string; title: string };
+
+// Middleware that adds user to context
+const withAuth: ContextMiddleware<
+    [string],        // Parameters: post ID
+    Post,            // Return type
+    {},              // Input context: none required
+    { user: User }   // Output context: adds user
+> = async (next, ctx, postId) => {
+    const user = await authenticate();
+    if (!user) {
+        return { ok: false, message: "Unauthorized", code: "UNAUTHORIZED" };
+    }
+    return next({ ...ctx, user }, postId);
+};
+
+// Middleware that requires user from previous middleware
+const withOwnerCheck: ContextMiddleware<
+    [string],
+    Post,
+    { user: User },  // Requires user from context
+    {}               // Adds nothing new
+> = async (next, ctx, postId) => {
+    const post = await getPost(postId);
+    if (post.authorId !== ctx.user.id) {
+        return { ok: false, message: "Forbidden", code: "FORBIDDEN" };
+    }
+    return next(ctx, postId);
+};
+```
+
 ### Inferring Types from Zod
 
 ```ts
@@ -204,5 +275,8 @@ import type {
     ServerActionFn,
     Middleware,
     ValidationSchema,
+    // Context-aware middleware types
+    BaseContext,
+    ContextMiddleware,
 } from "use-server-action/server";
 ```

@@ -7,8 +7,11 @@ import {
     createMiddleware,
     applyMiddleware,
     composeMiddleware,
-    withValidation,
+    withZodValidation,
     withLogging,
+    // Context-aware middleware
+    createAction,
+    createContextMiddleware,
 } from "use-server-action/server";
 ```
 
@@ -117,3 +120,145 @@ Execution flow:
 7. `first` completes (after)
 
 This is similar to how Express middleware or Koa middleware works.
+
+## Context-Aware Middleware
+
+For more complex scenarios where middleware needs to pass data to downstream middleware or the action (like user information from authentication), use the context-aware action builder.
+
+### Creating Context Middleware
+
+Use `createContextMiddleware` to create middleware that can add to a shared context:
+
+```ts
+import { createContextMiddleware } from "use-server-action/server";
+
+type User = { id: string; name: string; role: string };
+
+const withAuth = createContextMiddleware<
+    [string],           // Action parameters
+    ReturnType,         // Action return type
+    {},                 // Input context (what this middleware expects)
+    { user: User }      // Output context (what this middleware adds)
+>(async (next, ctx, input) => {
+    const user = await authenticate();
+
+    if (!user) {
+        return { ok: false, message: "Unauthorized", code: "UNAUTHORIZED" };
+    }
+
+    // Add user to context and continue
+    return next({ ...ctx, user }, input);
+});
+```
+
+### Building Actions with Context
+
+Use `createAction` to build actions that receive accumulated context from middleware:
+
+```ts
+import { createAction, createContextMiddleware } from "use-server-action/server";
+
+type User = { id: string; name: string };
+type Database = { query: (sql: string) => Promise<any> };
+
+// Middleware that adds user to context
+const withAuth = createContextMiddleware<
+    [string],
+    Post,
+    {},
+    { user: User }
+>(async (next, ctx, postId) => {
+    const user = await getAuthenticatedUser();
+    if (!user) {
+        return { ok: false, message: "Unauthorized", code: "UNAUTHORIZED" };
+    }
+    return next({ ...ctx, user }, postId);
+});
+
+// Middleware that adds database connection (can access user from context)
+const withDb = createContextMiddleware<
+    [string],
+    Post,
+    { user: User },      // Requires user from previous middleware
+    { db: Database }     // Adds db to context
+>(async (next, ctx, postId) => {
+    const db = await getDbConnection(ctx.user.id);
+    return next({ ...ctx, db }, postId);
+});
+
+// Create the action with chained middleware
+export const getPost = createAction<
+    [string],                      // Parameters
+    Post,                          // Return type
+    { user: User; db: Database }   // Final context type
+>(async (ctx, postId) => {
+    // ctx.user and ctx.db are fully typed!
+    const post = await ctx.db.query(`SELECT * FROM posts WHERE id = ${postId}`);
+    return { ok: true, data: post };
+})
+    .use(withAuth)
+    .use(withDb)
+    .build();
+
+// Call the action - context is handled internally
+const result = await getPost("post-123");
+```
+
+### Type Safety
+
+The context system is fully type-safe:
+
+- Each middleware declares what context it **requires** (`CtxIn`) and what it **provides** (`CtxOut`)
+- TypeScript ensures middleware is chained correctly - you can't use `withDb` before `withAuth` if `withDb` requires `{ user: User }`
+- The final action receives the accumulated context type from all middleware
+
+```ts
+// This would cause a TypeScript error because withDb requires { user: User }
+const broken = createAction(async (ctx, id) => { ... })
+    .use(withDb)      // Error: Property 'user' is missing
+    .use(withAuth)
+    .build();
+
+// Correct order
+const working = createAction(async (ctx, id) => { ... })
+    .use(withAuth)    // Adds { user: User }
+    .use(withDb)      // Receives { user: User }, adds { db: Database }
+    .build();
+```
+
+### Context Middleware Capabilities
+
+Context middleware can do everything regular middleware can:
+
+1. **Short-circuit** - Return early without calling `next`
+2. **Modify parameters** - Transform input before passing to `next`
+3. **Modify results** - Transform the result after calling `next`
+4. **Add context** - Pass data to downstream middleware and the action
+
+```ts
+// Example: Rate limiting with context
+const withRateLimit = createContextMiddleware<
+    [],
+    any,
+    { user: User },
+    { rateLimit: { remaining: number } }
+>(async (next, ctx) => {
+    const remaining = await checkRateLimit(ctx.user.id);
+
+    if (remaining <= 0) {
+        return { ok: false, message: "Rate limit exceeded", code: "RATE_LIMITED" };
+    }
+
+    return next({ ...ctx, rateLimit: { remaining } });
+});
+```
+
+### When to Use Context vs Regular Middleware
+
+| Use Case | Recommendation |
+|----------|----------------|
+| Simple validation/auth that doesn't need to share data | Regular middleware (`createMiddleware`) |
+| Logging, analytics, timing | Regular middleware |
+| Auth that needs to pass user info to action | Context middleware (`createContextMiddleware`) |
+| Database connections scoped to request | Context middleware |
+| Any middleware chain where data flows between layers | Context middleware |

@@ -11,6 +11,35 @@ export type Middleware<P extends unknown[], T> = (
     ...params: P
 ) => Promise<ServerActionResult<T>>;
 
+// ============================================================================
+// Context-Aware Middleware Types
+// ============================================================================
+
+/**
+ * Base context type - all contexts extend from this
+ */
+export type BaseContext = Record<string, unknown>;
+
+/**
+ * A context-aware middleware that can receive context from previous middleware
+ * and add new context for downstream middleware.
+ *
+ * @template P - The parameter types for the action
+ * @template T - The return type of the action
+ * @template CtxIn - The context type this middleware expects to receive
+ * @template CtxOut - The context type this middleware adds (merged with CtxIn for next)
+ */
+export type ContextMiddleware<
+    P extends unknown[],
+    T,
+    CtxIn extends BaseContext = BaseContext,
+    CtxOut extends BaseContext = BaseContext,
+> = (
+    next: (ctx: CtxIn & CtxOut, ...params: P) => Promise<ServerActionResult<T>>,
+    ctx: CtxIn,
+    ...params: P
+) => Promise<ServerActionResult<T>>;
+
 /**
  * Creates a type-safe middleware function.
  *
@@ -75,6 +104,155 @@ export function composeMiddleware<P extends unknown[], T>(
         );
         return chain(...params);
     };
+}
+
+// ============================================================================
+// Context-Aware Action Builder
+// ============================================================================
+
+/**
+ * A builder for creating server actions with type-safe context accumulation.
+ * Middleware can add to the context, and subsequent middleware receives the accumulated context.
+ *
+ * @template P - The parameter types for the action
+ * @template T - The return type of the action
+ * @template Ctx - The accumulated context type from all middleware
+ */
+class ActionBuilder<P extends unknown[], T, Ctx extends BaseContext = BaseContext> {
+    private middlewares: ContextMiddleware<P, T, BaseContext, BaseContext>[] = [];
+    private actionFn: (ctx: Ctx, ...params: P) => Promise<ServerActionResult<T>>;
+
+    constructor(action: (ctx: Ctx, ...params: P) => Promise<ServerActionResult<T>>) {
+        this.actionFn = action;
+    }
+
+    /**
+     * Add a context-aware middleware to the chain.
+     * The middleware receives the accumulated context and can add new context.
+     *
+     * @example
+     * ```ts
+     * const action = createAction(async (ctx, input: string) => {
+     *     // ctx has { user: User, db: Database }
+     *     return { ok: true, data: await ctx.db.query(input) };
+     * })
+     *     .use(withAuth)  // adds { user: User }
+     *     .use(withDb)    // adds { db: Database }
+     *     .build();
+     * ```
+     */
+    use<CtxOut extends BaseContext>(
+        middleware: ContextMiddleware<P, T, Ctx, CtxOut>,
+    ): ActionBuilder<P, T, Ctx & CtxOut> {
+        this.middlewares.push(
+            middleware as unknown as ContextMiddleware<P, T, BaseContext, BaseContext>,
+        );
+        return this as unknown as ActionBuilder<P, T, Ctx & CtxOut>;
+    }
+
+    /**
+     * Build the final server action with all middleware applied.
+     * Returns a function that accepts only the parameters (context is handled internally).
+     */
+    build(): (...params: P) => Promise<ServerActionResult<T>> {
+        const middlewares = this.middlewares;
+        const action = this.actionFn;
+
+        return async (...params: P): Promise<ServerActionResult<T>> => {
+            // Build the chain from right to left (last middleware is closest to action)
+            type NextFn = (ctx: BaseContext, ...p: P) => Promise<ServerActionResult<T>>;
+
+            const finalAction: NextFn = async (ctx, ...p) => {
+                return action(ctx as Ctx, ...p);
+            };
+
+            const chain = middlewares.reduceRight<NextFn>((next, mw) => {
+                return async (ctx, ...p) => {
+                    return mw(
+                        async (newCtx, ...nextParams) => {
+                            return next(newCtx, ...nextParams);
+                        },
+                        ctx,
+                        ...p,
+                    );
+                };
+            }, finalAction);
+
+            // Start with empty context
+            return chain({}, ...params);
+        };
+    }
+}
+
+/**
+ * Creates a new action builder with type-safe context accumulation.
+ *
+ * @example
+ * ```ts
+ * type User = { id: string; name: string };
+ *
+ * // Create middleware that adds user to context
+ * const withAuth = createContextMiddleware<[string], User, {}, { user: User }>(
+ *     async (next, ctx, input) => {
+ *         const user = await getUser();
+ *         if (!user) {
+ *             return { ok: false, message: "Unauthorized", code: "UNAUTHORIZED" };
+ *         }
+ *         return next({ ...ctx, user }, input);
+ *     }
+ * );
+ *
+ * // Create the action with middleware
+ * const myAction = createAction<[string], User, { user: User }>(
+ *     async (ctx, input) => {
+ *         // ctx.user is fully typed!
+ *         return { ok: true, data: ctx.user };
+ *     }
+ * )
+ *     .use(withAuth)
+ *     .build();
+ *
+ * // Call the action (context is handled internally)
+ * const result = await myAction("some-input");
+ * ```
+ */
+export function createAction<P extends unknown[], T, Ctx extends BaseContext = BaseContext>(
+    action: (ctx: Ctx, ...params: P) => Promise<ServerActionResult<T>>,
+): ActionBuilder<P, T, Ctx> {
+    return new ActionBuilder(action);
+}
+
+/**
+ * Creates a type-safe context-aware middleware.
+ *
+ * @example
+ * ```ts
+ * type User = { id: string; name: string };
+ *
+ * const withAuth = createContextMiddleware<
+ *     [string],           // Parameters
+ *     SomeReturnType,     // Return type
+ *     {},                 // Input context (none required)
+ *     { user: User }      // Output context (adds user)
+ * >(async (next, ctx, input) => {
+ *     const user = await authenticate();
+ *     if (!user) {
+ *         return { ok: false, message: "Unauthorized", code: "UNAUTHORIZED" };
+ *     }
+ *     // Pass the new context with user added
+ *     return next({ ...ctx, user }, input);
+ * });
+ * ```
+ */
+export function createContextMiddleware<
+    P extends unknown[],
+    T,
+    CtxIn extends BaseContext = BaseContext,
+    CtxOut extends BaseContext = BaseContext,
+>(
+    handler: ContextMiddleware<P, T, CtxIn, CtxOut>,
+): ContextMiddleware<P, T, CtxIn, CtxOut> {
+    return handler;
 }
 
 /**

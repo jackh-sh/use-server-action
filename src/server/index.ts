@@ -18,11 +18,16 @@ export {
     createMiddleware,
     applyMiddleware,
     composeMiddleware,
-    withValidation,
+    withZodValidation,
     withLogging,
+    createAction,
+    createContextMiddleware,
 } from "./middleware";
 export type {
     Middleware,
     ValidationSchema,
     WithValidationOptions,
+    // Context-aware middleware types
+    BaseContext,
+    ContextMiddleware,
 } from "./middleware";
