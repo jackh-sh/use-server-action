@@ -82,9 +82,14 @@ export function composeMiddleware<P extends unknown[], T>(
  * Works with Zod, Valibot, or any schema library with a compatible safeParse method.
  */
 export type ValidationSchema<T> = {
-    safeParse(data: unknown):
+    safeParse(
+        data: unknown,
+    ):
         | { success: true; data: T }
-        | { success: false; error: { message?: string; errors?: Array<{ message: string }> } };
+        | {
+              success: false;
+              error: { message?: string; errors?: Array<{ message: string }> };
+          };
 };
 
 export type WithValidationOptions = {
@@ -119,7 +124,7 @@ export type WithValidationOptions = {
  * );
  * ```
  */
-export function withValidation<TInput, T>(
+export function withZodValidation<TInput, T>(
     schema: ValidationSchema<TInput>,
     options: WithValidationOptions = {},
 ): Middleware<[TInput], T> {
@@ -131,9 +136,9 @@ export function withValidation<TInput, T>(
         if (!result.success) {
             const message = formatError
                 ? formatError(result.error)
-                : result.error.errors?.[0]?.message ??
+                : (result.error.errors?.[0]?.message ??
                   result.error.message ??
-                  "Validation failed";
+                  "Validation failed");
 
             return { ok: false, message, code };
         }
