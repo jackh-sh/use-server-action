@@ -1,10 +1,10 @@
-# Server Action
+# createAction
 
-Server-side utilities for creating and handling server actions.
+The action builder for creating type-safe server actions with middleware support.
 
 ```ts
 import {
-    serverAction,
+    createAction,
     success,
     error,
     isSuccess,
@@ -14,71 +14,133 @@ import {
 } from "use-server-action/server";
 ```
 
-## serverAction
+## createAction
 
-Wraps an async function to return a standardized `ServerActionResult`. Automatically catches errors and converts them to error results.
+Creates a new action builder with type-safe context accumulation. This is the recommended way to create server actions.
+
+### Basic Usage
 
 ```ts
-import { serverAction } from "use-server-action/server";
+import { createAction } from "use-server-action/server";
 
-export const createUserAction = serverAction(async (name: string) => {
-    // Just throw errors normally - they'll be caught and converted
-    if (!name.trim()) {
-        throw new Error("Name is required");
+export const createUser = createAction<{ name: string; email: string }>()
+    .handle(async (ctx, input) => {
+        const user = await db.user.create({ data: input });
+        return { ok: true, data: user };
+    });
+
+// Call the action
+const result = await createUser({ name: "John", email: "john@example.com" });
+```
+
+### With Middleware
+
+Chain middleware using `.use()` before calling `.handle()`:
+
+```ts
+import { createAction, withZodValidation, createMiddleware } from "use-server-action/server";
+import { z } from "zod";
+
+const withAuth = createMiddleware(async (next, ...params) => {
+    const user = await getUser();
+    if (!user) {
+        return { ok: false, message: "Unauthorized", code: "UNAUTHORIZED" };
     }
-
-    const user = await db.user.create({ data: { name } });
-    return user; // Automatically wrapped in { ok: true, data: user }
+    return next(...params);
 });
+
+const CreateUserSchema = z.object({
+    name: z.string().min(1),
+    email: z.string().email(),
+});
+
+export const createUser = createAction<z.infer<typeof CreateUserSchema>>()
+    .use(withAuth)
+    .use(withZodValidation(CreateUserSchema))
+    .handle(async (ctx, input) => {
+        // input is validated and typed
+        const user = await db.user.create({ data: input });
+        return { ok: true, data: user };
+    });
 ```
 
-### With Error Callback
+### Multiple Parameters
+
+For actions with multiple parameters, use a tuple type:
 
 ```ts
-export const createUserAction = serverAction(
-    async (name: string) => {
-        const user = await db.user.create({ data: { name } });
-        return user;
-    },
-    {
-        onError: (error) => {
-            // Log errors to your error tracking service
-            console.error("Action failed:", error);
-        },
-    }
-);
+export const updateUser = createAction<[string, { name: string }]>()
+    .handle(async (ctx, id, data) => {
+        const user = await db.user.update({ where: { id }, data });
+        return { ok: true, data: user };
+    });
+
+// Call with multiple arguments
+const result = await updateUser("user-123", { name: "Jane" });
 ```
 
-## success / error
+### No Parameters
 
-Helper functions to manually create result objects:
+For actions with no input, omit the type parameter:
+
+```ts
+export const getCurrentUser = createAction()
+    .use(withAuth)
+    .handle(async (ctx) => {
+        const user = await db.user.findUnique({ where: { id: ctx.user.id } });
+        return { ok: true, data: user };
+    });
+
+// Call without arguments
+const result = await getCurrentUser();
+```
+
+### Handler Return Type
+
+The handler must return a `ServerActionResult`:
+
+```ts
+// Return success
+return { ok: true, data: user };
+
+// Return error
+return { ok: false, message: "Not found", code: "NOT_FOUND" };
+```
+
+Or use the helper functions:
 
 ```ts
 import { success, error } from "use-server-action/server";
 
-export async function updateUserAction(id: string, data: UpdateData) {
-    const user = await db.user.findUnique({ where: { id } });
+// Return success
+return success(user);
 
-    if (!user) {
-        return error("User not found", "NOT_FOUND");
-    }
+// Return error
+return error("Not found", "NOT_FOUND");
+```
 
-    if (user.email !== data.email) {
-        const existing = await db.user.findUnique({
-            where: { email: data.email }
-        });
-        if (existing) {
-            return error("Email already in use", "DUPLICATE_EMAIL");
+## success / error
+
+Helper functions to create result objects:
+
+```ts
+import { success, error } from "use-server-action/server";
+
+export const updateUser = createAction<{ id: string; name: string }>()
+    .handle(async (ctx, input) => {
+        const user = await db.user.findUnique({ where: { id: input.id } });
+
+        if (!user) {
+            return error("User not found", "NOT_FOUND");
         }
-    }
 
-    const updated = await db.user.update({
-        where: { id },
-        data,
+        const updated = await db.user.update({
+            where: { id: input.id },
+            data: { name: input.name },
+        });
+
+        return success(updated);
     });
-
-    return success(updated);
-}
 ```
 
 ### success(data)
@@ -134,7 +196,7 @@ Extracts data from a successful result, or throws on error:
 import { unwrap } from "use-server-action/server";
 
 try {
-    const user = unwrap(await createUser("John"));
+    const user = unwrap(await createUser({ name: "John", email: "john@example.com" }));
     console.log(user); // The user data
 } catch (e) {
     // Thrown if result was an error
@@ -161,27 +223,68 @@ const count = unwrapOr(await getCount(), 0);
 You can call server actions from other server actions:
 
 ```ts
-export const createUserWithProfile = serverAction(async (data: CreateUserData) => {
-    // Create the user
-    const userResult = await createUser(data.name);
-    if (!userResult.ok) {
-        return userResult; // Forward the error
-    }
+export const createUserWithProfile = createAction<{
+    name: string;
+    bio: string;
+}>()
+    .handle(async (ctx, data) => {
+        // Create the user
+        const userResult = await createUser({ name: data.name, email: "" });
+        if (!userResult.ok) {
+            return userResult; // Forward the error
+        }
 
-    // Create the profile
-    const profileResult = await createProfile({
-        userId: userResult.data.id,
-        bio: data.bio,
-    });
-    if (!profileResult.ok) {
-        // Rollback or handle error
-        await deleteUser(userResult.data.id);
-        return error("Failed to create profile", "PROFILE_ERROR");
-    }
+        // Create the profile
+        const profileResult = await createProfile({
+            userId: userResult.data.id,
+            bio: data.bio,
+        });
+        if (!profileResult.ok) {
+            // Rollback or handle error
+            await deleteUser(userResult.data.id);
+            return error("Failed to create profile", "PROFILE_ERROR");
+        }
 
-    return success({
-        user: userResult.data,
-        profile: profileResult.data,
+        return success({
+            user: userResult.data,
+            profile: profileResult.data,
+        });
     });
-});
 ```
+
+## Legacy: serverAction (Deprecated)
+
+> **Deprecated:** Use `createAction().handle(fn)` instead for better type inference and middleware support.
+
+The old `serverAction` wrapper is still available but deprecated:
+
+```ts
+import { serverAction } from "use-server-action/server";
+
+// Old way (deprecated)
+export const createUserAction = serverAction(async (name: string) => {
+    if (!name.trim()) {
+        throw new Error("Name is required");
+    }
+    const user = await db.user.create({ data: { name } });
+    return user;
+});
+
+// New way (recommended)
+export const createUserAction = createAction<{ name: string }>()
+    .handle(async (ctx, input) => {
+        if (!input.name.trim()) {
+            return { ok: false, message: "Name is required", code: "VALIDATION_ERROR" };
+        }
+        const user = await db.user.create({ data: { name: input.name } });
+        return { ok: true, data: user };
+    });
+```
+
+### Migration Guide
+
+1. Replace `serverAction(fn)` with `createAction<InputType>().handle(fn)`
+2. Move the input type from function parameters to the generic `createAction<T>()`
+3. Change your handler to receive `(ctx, input)` instead of just `(input)`
+4. Return `{ ok: true, data }` instead of just returning the data
+5. Return `{ ok: false, message, code }` instead of throwing errors

@@ -12,6 +12,13 @@ const withAuth = createMiddleware(async (next, ...params) => {
 
     return next(...params);
 });
+
+// Usage
+export const protectedAction = createAction<{ id: string }>()
+    .use(withAuth)
+    .handle(async (ctx, input) => {
+        return { ok: true, data: { id: input.id } };
+    });
 ```
 
 ### Role-Based Access
@@ -33,7 +40,11 @@ const withRole = (role: string) =>
     });
 
 // Usage
-export const adminAction = applyMiddleware(myAction, [withRole("admin")]);
+export const adminAction = createAction<{ data: string }>()
+    .use(withRole("admin"))
+    .handle(async (ctx, input) => {
+        return { ok: true, data: input.data };
+    });
 ```
 
 ### Rate Limiting
@@ -64,9 +75,11 @@ const withRateLimit = (limit: number, windowMs: number) =>
     });
 
 // Usage: 10 requests per minute
-export const limitedAction = applyMiddleware(myAction, [
-    withRateLimit(10, 60000),
-]);
+export const limitedAction = createAction<string>()
+    .use(withRateLimit(10, 60000))
+    .handle(async (ctx, input) => {
+        return { ok: true, data: input };
+    });
 ```
 
 ### Error Logging
@@ -86,4 +99,11 @@ const withErrorLogging = createMiddleware(async (next, ...params) => {
 
     return result;
 });
+
+// Usage
+export const trackedAction = createAction<{ input: string }>()
+    .use(withErrorLogging)
+    .handle(async (ctx, data) => {
+        return { ok: true, data: data.input };
+    });
 ```

@@ -1,5 +1,5 @@
 export default {
-    server: "serverAction()",
+    server: "createAction()",
     middleware: "Middleware",
     "with-logging": "withLogging",
     "with-zod-validation": "withZodValidation",
