@@ -1,3 +1,6 @@
+"use server";
+
+// Server action utilities
 export {
     serverAction,
     success,
@@ -14,20 +17,26 @@ export type {
     ServerActionFn,
 } from "./server-action";
 
+// Types
+export type {
+    BaseContext,
+    ContextMiddleware,
+    Middleware,
+    ValidationSchema,
+    WithValidationOptions,
+} from "./types";
+
+// Context middleware
+export { createContextMiddleware } from "./context-middleware";
+
+// Action builder
+export { createAction } from "./action-builder";
+
+// Middleware utilities
 export {
     createMiddleware,
     applyMiddleware,
     composeMiddleware,
     withZodValidation,
     withLogging,
-    createAction,
-    createContextMiddleware,
-} from "./middleware";
-export type {
-    Middleware,
-    ValidationSchema,
-    WithValidationOptions,
-    // Context-aware middleware types
-    BaseContext,
-    ContextMiddleware,
-} from "./middleware";
+} from "./middleware-utils";

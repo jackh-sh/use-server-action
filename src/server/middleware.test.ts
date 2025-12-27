@@ -10,7 +10,7 @@ import {
     createContextMiddleware,
     type ValidationSchema,
     type ContextMiddleware,
-} from "./middleware";
+} from "./index";
 
 type TestData = { value: string };
 
@@ -597,14 +597,23 @@ describe("middleware", () => {
 
         describe("createAction", () => {
             it("should build action with no middleware", async () => {
-                const action = createAction<[string], TestData>(
-                    async (ctx, input) => {
+                const action = createAction<string>()
+                    .handle(async (ctx, input) => {
                         return { ok: true, data: { value: input } };
-                    },
-                ).build();
+                    });
 
                 const result = await action("hello");
                 expect(result).toEqual({ ok: true, data: { value: "hello" } });
+            });
+
+            it("should build action with no input", async () => {
+                const action = createAction()
+                    .handle(async (ctx) => {
+                        return { ok: true, data: { value: "no input" } };
+                    });
+
+                const result = await action();
+                expect(result).toEqual({ ok: true, data: { value: "no input" } });
             });
 
             it("should pass context from middleware to action", async () => {
@@ -618,16 +627,14 @@ describe("middleware", () => {
                     return next({ ...ctx, user }, input);
                 });
 
-                const action = createAction<[string], TestData, { user: User }>(
-                    async (ctx, input) => {
+                const action = createAction<string>()
+                    .use(withAuth)
+                    .handle(async (ctx, input) => {
                         return {
                             ok: true,
                             data: { value: `${ctx.user.name}: ${input}` },
                         };
-                    },
-                )
-                    .use(withAuth)
-                    .build();
+                    });
 
                 const result = await action("hello");
                 expect(result).toEqual({
@@ -662,16 +669,12 @@ describe("middleware", () => {
                     return next({ ...ctx, db }, input);
                 });
 
-                const action = createAction<
-                    [string],
-                    TestData,
-                    { user: User; db: Database }
-                >(async (ctx, input) => {
-                    return { ok: true, data: { value: ctx.db.query(input) } };
-                })
+                const action = createAction<string>()
                     .use(withAuth)
                     .use(withDb)
-                    .build();
+                    .handle(async (ctx, input) => {
+                        return { ok: true, data: { value: ctx.db.query(input) } };
+                    });
 
                 const result = await action("SELECT * FROM users");
                 expect(result).toEqual({
@@ -702,25 +705,18 @@ describe("middleware", () => {
                     { second: true }
                 >(async (next, ctx) => {
                     callOrder.push("second:before");
-                    const result = await next({
-                        ...ctx,
-                        second: true as const,
-                    });
+                    const result = await next({ ...ctx, second: true as const });
                     callOrder.push("second:after");
                     return result;
                 });
 
-                const action = createAction<
-                    [],
-                    TestData,
-                    { first: true; second: true }
-                >(async (ctx) => {
-                    callOrder.push("action");
-                    return { ok: true, data: { value: "done" } };
-                })
+                const action = createAction()
                     .use(first)
                     .use(second)
-                    .build();
+                    .handle(async () => {
+                        callOrder.push("action");
+                        return { ok: true, data: { value: "done" } };
+                    });
 
                 await action();
 
@@ -762,13 +758,9 @@ describe("middleware", () => {
                     },
                 );
 
-                const action = createAction<
-                    [{ token: string }],
-                    TestData,
-                    { user: User }
-                >(actionFn)
+                const action = createAction<{ token: string }>()
                     .use(withAuth)
-                    .build();
+                    .handle(actionFn);
 
                 // Invalid token should short-circuit
                 const failResult = await action({ token: "invalid" });
@@ -789,24 +781,30 @@ describe("middleware", () => {
             });
 
             it("should allow middleware to modify parameters", async () => {
+                type TransformInput = { str: string; num: number };
+
                 const withTransform = createContextMiddleware<
-                    [string, number],
+                    [TransformInput],
                     TestData,
                     {},
                     {}
-                >(async (next, ctx, str, num) => {
-                    return next(ctx, str.toUpperCase(), num * 2);
+                >(async (next, ctx, input) => {
+                    return next(ctx, {
+                        str: input.str.toUpperCase(),
+                        num: input.num * 2,
+                    });
                 });
 
-                const action = createAction<[string, number], TestData>(
-                    async (ctx, str, num) => {
-                        return { ok: true, data: { value: `${str}:${num}` } };
-                    },
-                )
+                const action = createAction<TransformInput>()
                     .use(withTransform)
-                    .build();
+                    .handle(async (ctx, input) => {
+                        return {
+                            ok: true,
+                            data: { value: `${input.str}:${input.num}` },
+                        };
+                    });
 
-                const result = await action("hello", 5);
+                const result = await action({ str: "hello", num: 5 });
                 expect(result).toEqual({
                     ok: true,
                     data: { value: "HELLO:10" },
@@ -829,7 +827,6 @@ describe("middleware", () => {
                     { userId: string },
                     { permissions: string[] }
                 >(async (next, ctx) => {
-                    // Access userId from previous middleware
                     const permissions =
                         ctx.userId === "user-123"
                             ? ["read", "write"]
@@ -837,26 +834,89 @@ describe("middleware", () => {
                     return next({ ...ctx, permissions });
                 });
 
-                const action = createAction<
-                    [],
-                    TestData,
-                    { userId: string; permissions: string[] }
-                >(async (ctx) => {
-                    return {
-                        ok: true,
-                        data: {
-                            value: `${ctx.userId}: ${ctx.permissions.join(",")}`,
-                        },
-                    };
-                })
+                const action = createAction()
                     .use(withUser)
                     .use(withPermissions)
-                    .build();
+                    .handle(async (ctx) => {
+                        return {
+                            ok: true,
+                            data: {
+                                value: `${ctx.userId}: ${ctx.permissions.join(",")}`,
+                            },
+                        };
+                    });
 
                 const result = await action();
                 expect(result).toEqual({
                     ok: true,
                     data: { value: "user-123: read,write" },
+                });
+            });
+
+            it("should work with regular (non-context) middleware", async () => {
+                const callOrder: string[] = [];
+
+                const loggingMiddleware = createMiddleware<
+                    [string],
+                    TestData
+                >(async (next, input) => {
+                    callOrder.push("logging:before");
+                    const result = await next(input);
+                    callOrder.push("logging:after");
+                    return result;
+                });
+
+                const withUser = createContextMiddleware<
+                    [string],
+                    TestData,
+                    {},
+                    { user: User }
+                >(async (next, ctx, input) => {
+                    callOrder.push("withUser");
+                    return next(
+                        { ...ctx, user: { id: "1", name: "Test" } },
+                        input,
+                    );
+                });
+
+                const action = createAction<string>()
+                    .use(loggingMiddleware)
+                    .use(withUser)
+                    .handle(async (ctx, input) => {
+                        callOrder.push("action");
+                        return {
+                            ok: true,
+                            data: { value: `${ctx.user.name}: ${input}` },
+                        };
+                    });
+
+                const result = await action("hello");
+
+                expect(result).toEqual({
+                    ok: true,
+                    data: { value: "Test: hello" },
+                });
+                expect(callOrder).toEqual([
+                    "logging:before",
+                    "withUser",
+                    "action",
+                    "logging:after",
+                ]);
+            });
+
+            it("should support multiple input parameters", async () => {
+                const action = createAction<[string, number]>()
+                    .handle(async (ctx, name, count) => {
+                        return {
+                            ok: true,
+                            data: { value: `${name}: ${count}` },
+                        };
+                    });
+
+                const result = await action("items", 5);
+                expect(result).toEqual({
+                    ok: true,
+                    data: { value: "items: 5" },
                 });
             });
         });

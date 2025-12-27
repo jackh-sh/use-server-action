@@ -32,6 +32,24 @@ type ServerActionOptions = {
 /**
  * Wraps an async function to return a standardized ServerActionResult.
  * Catches any thrown errors and converts them to error results.
+ *
+ * @deprecated Use `createAction().input(schema).handle(fn)` instead.
+ * The new API provides better type inference and built-in validation.
+ *
+ * @example
+ * ```ts
+ * // Old way (deprecated):
+ * const myAction = serverAction(async (input: MyInput) => {
+ *     return await doSomething(input);
+ * });
+ *
+ * // New way:
+ * const myAction = createAction()
+ *     .input(mySchema)
+ *     .handle(async (ctx, input) => {
+ *         return { ok: true, data: await doSomething(input) };
+ *     });
+ * ```
  */
 export function serverAction<P extends unknown[], T>(
     fn: (...args: P) => Promise<T>,
