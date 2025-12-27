@@ -149,7 +149,15 @@ class ActionBuilder<
             }, finalHandler);
 
             // Start with empty context
-            return chain({}, ...args);
+            try {
+                return await chain({}, ...args);
+            } catch (err) {
+                const message =
+                    err instanceof Error ? err.message : "Unknown error";
+                const code =
+                    err instanceof Error ? err.name : "UNKNOWN_ERROR";
+                return { ok: false, message, code };
+            }
         };
     }
 }

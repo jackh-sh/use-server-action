@@ -919,6 +919,56 @@ describe("middleware", () => {
                     data: { value: "items: 5" },
                 });
             });
+
+            it("should catch thrown errors and return error result", async () => {
+                const action = createAction<string>().handle(async (ctx, input) => {
+                    throw new Error("Something went wrong");
+                });
+
+                const result = await action("test");
+                expect(result).toEqual({
+                    ok: false,
+                    message: "Something went wrong",
+                    code: "Error",
+                });
+            });
+
+            it("should handle non-Error thrown values", async () => {
+                const action = createAction<string>().handle(async (ctx, input) => {
+                    throw "string error";
+                });
+
+                const result = await action("test");
+                expect(result).toEqual({
+                    ok: false,
+                    message: "Unknown error",
+                    code: "UNKNOWN_ERROR",
+                });
+            });
+
+            it("should catch errors thrown in middleware", async () => {
+                const throwingMiddleware = createContextMiddleware<
+                    [string],
+                    TestData,
+                    {},
+                    {}
+                >(async (next, ctx, input) => {
+                    throw new TypeError("Middleware error");
+                });
+
+                const action = createAction<string>()
+                    .use(throwingMiddleware)
+                    .handle(async (ctx, input) => {
+                        return { ok: true, data: { value: input } };
+                    });
+
+                const result = await action("test");
+                expect(result).toEqual({
+                    ok: false,
+                    message: "Middleware error",
+                    code: "TypeError",
+                });
+            });
         });
     });
 });
