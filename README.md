@@ -16,26 +16,30 @@ npm install use-server-action
 // app/actions.ts
 "use server";
 
-import { serverAction, success, error } from "use-server-action/server";
+import { createAction, createContextMiddleware } from "use-server-action/server";
 
-export const createUser = serverAction(async (name: string) => {
-    if (!name.trim()) {
-        throw new Error("Name is required");
+// Simple action
+export const createUser = createAction<{ name: string }>()
+    .handle(async (ctx, input) => {
+        const user = await db.user.create({ data: { name: input.name } });
+        return { ok: true, data: user };
+    });
+
+// With authentication middleware
+const withAuth = createContextMiddleware(async (next, ctx, ...args) => {
+    const user = await getUser();
+    if (!user) {
+        return { ok: false, message: "Unauthorized", code: "UNAUTHORIZED" };
     }
-
-    const user = await db.user.create({ data: { name } });
-    return user;
+    return next({ ...ctx, user }, ...args);
 });
 
-// Or handle errors manually for more control:
-export const deleteUserAction = async (id: string) => {
-    try {
-        await db.user.delete({ where: { id } });
-        return success({ deleted: true });
-    } catch (e) {
-        return error("Failed to delete user", "DELETE_FAILED");
-    }
-};
+export const deleteUser = createAction<{ id: string }>()
+    .use(withAuth)
+    .handle(async (ctx, input) => {
+        await db.user.delete({ where: { id: input.id, ownerId: ctx.user.id } });
+        return { ok: true, data: { deleted: true } };
+    });
 ```
 
 ### 2. Use in a client component
@@ -47,26 +51,14 @@ import { useServerAction } from "use-server-action";
 import { createUser } from "./actions";
 
 export function CreateUserForm() {
-    const {
-        execute,
-        data,
-        error,
-        isPending,
-        isSuccess,
-        isError,
-        reset,
-    } = useServerAction({
+    const { execute, data, error, isPending, isSuccess, isError } = useServerAction({
         action: createUser,
-        onSuccess: (user) => {
-            console.log("User created:", user);
-        },
-        onError: (message, code) => {
-            console.error(`Error [${code}]:`, message);
-        },
+        onSuccess: (user) => console.log("User created:", user),
+        onError: (message, code) => console.error(`Error [${code}]:`, message),
     });
 
     return (
-        <form action={(formData) => execute(formData.get("name") as string)}>
+        <form action={(formData) => execute({ name: formData.get("name") as string })}>
             <input name="name" placeholder="Name" disabled={isPending} />
             <button type="submit" disabled={isPending}>
                 {isPending ? "Creating..." : "Create User"}
@@ -77,6 +69,14 @@ export function CreateUserForm() {
     );
 }
 ```
+
+## Features
+
+- **Type-safe** - Full TypeScript support with inferred types for context and inputs
+- **Middleware support** - Chain middleware with `createAction().use(middleware)`
+- **Context accumulation** - Middleware can add typed context for downstream handlers
+- **Automatic error handling** - Thrown errors are caught and returned as error results
+- **Zod validation** - Built-in `withZodValidation` middleware for input validation
 
 ## Documentation
 
