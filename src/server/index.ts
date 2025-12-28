@@ -18,11 +18,11 @@ export {
     createMiddleware,
     applyMiddleware,
     composeMiddleware,
-    withValidation,
+    withZodValidation,
     withLogging,
 } from "./middleware";
 export type {
     Middleware,
-    ValidationSchema,
-    WithValidationOptions,
+    ValidationZodSchema,
+    WithZodValidationOptions,
 } from "./middleware";

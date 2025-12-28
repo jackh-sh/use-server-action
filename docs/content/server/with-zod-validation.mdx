@@ -10,7 +10,7 @@ This middleware validates input against a Zod-compatible schema:
 
 ```ts
 import { z } from "zod";
-import { withValidation, applyMiddleware, serverAction } from "use-server-action/server";
+import { withZodValidation, applyMiddleware, serverAction } from "use-server-action/server";
 
 const CreateUserSchema = z.object({
     name: z.string().min(1, "Name is required"),
@@ -29,7 +29,7 @@ export const validatedCreateUser = applyMiddleware(createUser, [
 #### Options
 
 ```ts
-withValidation(schema, {
+withZodValidation(schema, {
     // Custom error code (default: "VALIDATION_ERROR")
     code: "INVALID_INPUT",
 

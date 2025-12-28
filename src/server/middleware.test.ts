@@ -5,8 +5,8 @@ import {
     composeMiddleware,
     createMiddleware,
     withLogging,
-    withValidation,
-    type ValidationSchema,
+    withZodValidation,
+    type ValidationZodSchema,
 } from "./middleware";
 
 type TestData = { value: string };
@@ -47,7 +47,9 @@ describe("middleware", () => {
             );
 
             const action = vi.fn(
-                async (input: string): Promise<ServerActionResult<TestData>> => {
+                async (
+                    input: string,
+                ): Promise<ServerActionResult<TestData>> => {
                     return { ok: true, data: { value: input } };
                 },
             );
@@ -61,7 +63,11 @@ describe("middleware", () => {
             const middleware = createMiddleware<[string], TestData>(
                 async (next, input) => {
                     if (input === "blocked") {
-                        return { ok: false, message: "Blocked", code: "BLOCKED" };
+                        return {
+                            ok: false,
+                            message: "Blocked",
+                            code: "BLOCKED",
+                        };
                     }
                     return next(input);
                 },
@@ -70,7 +76,11 @@ describe("middleware", () => {
             const action = createSuccessAction({ value: "test" });
             const result = await middleware(action, "blocked");
 
-            expect(result).toEqual({ ok: false, message: "Blocked", code: "BLOCKED" });
+            expect(result).toEqual({
+                ok: false,
+                message: "Blocked",
+                code: "BLOCKED",
+            });
             expect(action).not.toHaveBeenCalled();
         });
 
@@ -89,7 +99,10 @@ describe("middleware", () => {
             const action = createSuccessAction({ value: "original" });
             const result = await middleware(action);
 
-            expect(result).toEqual({ ok: true, data: { value: "original_modified" } });
+            expect(result).toEqual({
+                ok: true,
+                data: { value: "original_modified" },
+            });
         });
     });
 
@@ -104,10 +117,12 @@ describe("middleware", () => {
                 return result;
             });
 
-            const action = vi.fn(async (): Promise<ServerActionResult<TestData>> => {
-                callOrder.push("action");
-                return { ok: true, data: { value: "test" } };
-            });
+            const action = vi.fn(
+                async (): Promise<ServerActionResult<TestData>> => {
+                    callOrder.push("action");
+                    return { ok: true, data: { value: "test" } };
+                },
+            );
 
             const wrapped = applyMiddleware(action, [middleware]);
             await wrapped();
@@ -136,10 +151,12 @@ describe("middleware", () => {
                 return result;
             });
 
-            const action = vi.fn(async (): Promise<ServerActionResult<TestData>> => {
-                callOrder.push("action");
-                return { ok: true, data: { value: "test" } };
-            });
+            const action = vi.fn(
+                async (): Promise<ServerActionResult<TestData>> => {
+                    callOrder.push("action");
+                    return { ok: true, data: { value: "test" } };
+                },
+            );
 
             const wrapped = applyMiddleware(action, [first, second]);
             await wrapped();
@@ -172,7 +189,10 @@ describe("middleware", () => {
             const wrapped = applyMiddleware(action, [middleware]);
             const result = await wrapped("test", 5);
 
-            expect(result).toEqual({ ok: true, data: { value: "test_modified:6" } });
+            expect(result).toEqual({
+                ok: true,
+                data: { value: "test_modified:6" },
+            });
         });
     });
 
@@ -202,7 +222,9 @@ describe("middleware", () => {
     describe("withLogging", () => {
         it("should call onCall with params", async () => {
             const onCall = vi.fn();
-            const middleware = withLogging<[string, number], TestData>({ onCall });
+            const middleware = withLogging<[string, number], TestData>({
+                onCall,
+            });
             const action = createSuccessAction({ value: "test" });
 
             await middleware(action, "hello", 42);
@@ -217,7 +239,9 @@ describe("middleware", () => {
 
             await middleware(action, "input");
 
-            expect(onSuccess).toHaveBeenCalledWith({ value: "test" }, ["input"]);
+            expect(onSuccess).toHaveBeenCalledWith({ value: "test" }, [
+                "input",
+            ]);
         });
 
         it("should call onError for error results", async () => {
@@ -248,8 +272,12 @@ describe("middleware", () => {
 
         // Mock schema that mimics Zod's safeParse interface
         const createMockSchema = <T>(
-            validator: (data: unknown) => { valid: boolean; data?: T; message?: string },
-        ): ValidationSchema<T> => ({
+            validator: (data: unknown) => {
+                valid: boolean;
+                data?: T;
+                message?: string;
+            },
+        ): ValidationZodSchema<T> => ({
             safeParse: (data: unknown) => {
                 const result = validator(data);
                 if (result.valid) {
@@ -257,7 +285,9 @@ describe("middleware", () => {
                 }
                 return {
                     success: false,
-                    error: { errors: [{ message: result.message ?? "Invalid" }] },
+                    error: {
+                        errors: [{ message: result.message ?? "Invalid" }],
+                    },
                 };
             },
         });
@@ -275,27 +305,44 @@ describe("middleware", () => {
 
         it("should pass valid data to next", async () => {
             const action = vi.fn(
-                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                async (
+                    input: UserInput,
+                ): Promise<ServerActionResult<TestData>> => {
                     return { ok: true, data: { value: input.name } };
                 },
             );
 
-            const validated = withValidation<UserInput, TestData>(validUserSchema);
-            const result = await validated(action, { name: "John", email: "john@example.com" });
+            const validated = withZodValidation<UserInput, TestData>(
+                validUserSchema,
+            );
+            const result = await validated(action, {
+                name: "John",
+                email: "john@example.com",
+            });
 
             expect(result).toEqual({ ok: true, data: { value: "John" } });
-            expect(action).toHaveBeenCalledWith({ name: "John", email: "john@example.com" });
+            expect(action).toHaveBeenCalledWith({
+                name: "John",
+                email: "john@example.com",
+            });
         });
 
         it("should return error for invalid data", async () => {
             const action = vi.fn(
-                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                async (
+                    input: UserInput,
+                ): Promise<ServerActionResult<TestData>> => {
                     return { ok: true, data: { value: input.name } };
                 },
             );
 
-            const validated = withValidation<UserInput, TestData>(validUserSchema);
-            const result = await validated(action, { name: "", email: "john@example.com" });
+            const validated = withZodValidation<UserInput, TestData>(
+                validUserSchema,
+            );
+            const result = await validated(action, {
+                name: "",
+                email: "john@example.com",
+            });
 
             expect(result).toEqual({
                 ok: false,
@@ -307,14 +354,19 @@ describe("middleware", () => {
 
         it("should use custom error code", async () => {
             const action = vi.fn(
-                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                async (
+                    input: UserInput,
+                ): Promise<ServerActionResult<TestData>> => {
                     return { ok: true, data: { value: input.name } };
                 },
             );
 
-            const validated = withValidation<UserInput, TestData>(validUserSchema, {
-                code: "INVALID_INPUT",
-            });
+            const validated = withZodValidation<UserInput, TestData>(
+                validUserSchema,
+                {
+                    code: "INVALID_INPUT",
+                },
+            );
             const result = await validated(action, { name: "", email: "" });
 
             expect(result).toEqual({
@@ -326,14 +378,20 @@ describe("middleware", () => {
 
         it("should use custom error formatter", async () => {
             const action = vi.fn(
-                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                async (
+                    input: UserInput,
+                ): Promise<ServerActionResult<TestData>> => {
                     return { ok: true, data: { value: input.name } };
                 },
             );
 
-            const validated = withValidation<UserInput, TestData>(validUserSchema, {
-                formatError: (error) => `Custom: ${error.errors?.[0]?.message}`,
-            });
+            const validated = withZodValidation<UserInput, TestData>(
+                validUserSchema,
+                {
+                    formatError: (error) =>
+                        `Custom: ${error.errors?.[0]?.message}`,
+                },
+            );
             const result = await validated(action, { name: "", email: "" });
 
             expect(result).toEqual({
@@ -345,16 +403,21 @@ describe("middleware", () => {
 
         it("should work with applyMiddleware", async () => {
             const action = vi.fn(
-                async (input: UserInput): Promise<ServerActionResult<TestData>> => {
+                async (
+                    input: UserInput,
+                ): Promise<ServerActionResult<TestData>> => {
                     return { ok: true, data: { value: input.name } };
                 },
             );
 
             const wrappedAction = applyMiddleware(action, [
-                withValidation(validUserSchema),
+                withZodValidation(validUserSchema),
             ]);
 
-            const validResult = await wrappedAction({ name: "Jane", email: "jane@test.com" });
+            const validResult = await wrappedAction({
+                name: "Jane",
+                email: "jane@test.com",
+            });
             expect(validResult).toEqual({ ok: true, data: { value: "Jane" } });
 
             const invalidResult = await wrappedAction({ name: "", email: "" });
@@ -362,7 +425,7 @@ describe("middleware", () => {
         });
 
         it("should handle schema with message fallback", async () => {
-            const schemaWithMessage: ValidationSchema<string> = {
+            const schemaWithMessage: ValidationZodSchema<string> = {
                 safeParse: () => ({
                     success: false,
                     error: { message: "Schema-level error" },
@@ -375,7 +438,9 @@ describe("middleware", () => {
                 },
             );
 
-            const validated = withValidation<string, TestData>(schemaWithMessage);
+            const validated = withZodValidation<string, TestData>(
+                schemaWithMessage,
+            );
             const result = await validated(action, "any");
 
             expect(result).toEqual({
@@ -386,7 +451,7 @@ describe("middleware", () => {
         });
 
         it("should fallback to default message", async () => {
-            const schemaWithNoMessage: ValidationSchema<string> = {
+            const schemaWithNoMessage: ValidationZodSchema<string> = {
                 safeParse: () => ({
                     success: false,
                     error: {},
@@ -399,7 +464,9 @@ describe("middleware", () => {
                 },
             );
 
-            const validated = withValidation<string, TestData>(schemaWithNoMessage);
+            const validated = withZodValidation<string, TestData>(
+                schemaWithNoMessage,
+            );
             const result = await validated(action, "any");
 
             expect(result).toEqual({
@@ -412,14 +479,19 @@ describe("middleware", () => {
 
     describe("integration", () => {
         it("should work with serverAction-style functions", async () => {
-            const authMiddleware = createMiddleware<[{ token: string }], TestData>(
-                async (next, params) => {
-                    if (params.token !== "valid") {
-                        return { ok: false, message: "Unauthorized", code: "UNAUTHORIZED" };
-                    }
-                    return next(params);
-                },
-            );
+            const authMiddleware = createMiddleware<
+                [{ token: string }],
+                TestData
+            >(async (next, params) => {
+                if (params.token !== "valid") {
+                    return {
+                        ok: false,
+                        message: "Unauthorized",
+                        code: "UNAUTHORIZED",
+                    };
+                }
+                return next(params);
+            });
 
             const action = vi.fn(
                 async (params: {

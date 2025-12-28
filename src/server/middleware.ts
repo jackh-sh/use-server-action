@@ -81,13 +81,18 @@ export function composeMiddleware<P extends unknown[], T>(
  * A Zod-like schema interface for validation.
  * Works with Zod, Valibot, or any schema library with a compatible safeParse method.
  */
-export type ValidationSchema<T> = {
-    safeParse(data: unknown):
+export type ValidationZodSchema<T> = {
+    safeParse(
+        data: unknown,
+    ):
         | { success: true; data: T }
-        | { success: false; error: { message?: string; errors?: Array<{ message: string }> } };
+        | {
+              success: false;
+              error: { message?: string; errors?: Array<{ message: string }> };
+          };
 };
 
-export type WithValidationOptions = {
+export type WithZodValidationOptions = {
     /** Error code to return on validation failure. Defaults to "VALIDATION_ERROR" */
     code?: string;
     /** Custom error message formatter */
@@ -119,9 +124,9 @@ export type WithValidationOptions = {
  * );
  * ```
  */
-export function withValidation<TInput, T>(
-    schema: ValidationSchema<TInput>,
-    options: WithValidationOptions = {},
+export function withZodValidation<TInput, T>(
+    schema: ValidationZodSchema<TInput>,
+    options: WithZodValidationOptions = {},
 ): Middleware<[TInput], T> {
     const { code = "VALIDATION_ERROR", formatError } = options;
 
@@ -131,9 +136,9 @@ export function withValidation<TInput, T>(
         if (!result.success) {
             const message = formatError
                 ? formatError(result.error)
-                : result.error.errors?.[0]?.message ??
+                : (result.error.errors?.[0]?.message ??
                   result.error.message ??
-                  "Validation failed";
+                  "Validation failed");
 
             return { ok: false, message, code };
         }
