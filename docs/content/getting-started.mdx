@@ -15,11 +15,13 @@ Create a server action using the `serverAction` wrapper. This automatically hand
 ```ts filename="app/actions.ts"
 "use server";
 
-import { serverAction } from "use-server-action/server";
+import { serverAction, HandledError } from "use-server-action/server";
 
 export const createUserAction = serverAction(async (name: string) => {
     if (!name.trim()) {
-        throw new Error("Name is required");
+        // Use HandledError to surface a specific message to the client.
+        // Plain Error throws result in a generic "An unexpected error occurred".
+        throw new HandledError("Name is required", "VALIDATION_ERROR");
     }
 
     const user = await db.user.create({ data: { name } });

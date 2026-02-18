@@ -7,6 +7,7 @@ import {
     serverAction,
     success,
     error,
+    HandledError,
     isSuccess,
     isError,
     unwrap,
@@ -18,13 +19,21 @@ import {
 
 Wraps an async function to return a standardized `ServerActionResult`. Automatically catches errors and converts them to error results.
 
+**Error handling behavior:**
+- Returning `success(data)` or a plain value → `{ ok: true, data }`
+- Returning `error(message, code)` → `{ ok: false, message, code }`
+- Throwing a `HandledError` → `{ ok: false, message, code }` (message is surfaced to the client)
+- Throwing any other error → `{ ok: false, message: "An unexpected error occurred", code: "UNKNOWN_ERROR" }` (original message is hidden)
+
+This means unexpected errors (database failures, programming errors, etc.) are never accidentally exposed to the client.
+
 ```ts
-import { serverAction } from "use-server-action/server";
+import { serverAction, HandledError } from "use-server-action/server";
 
 export const createUserAction = serverAction(async (name: string) => {
-    // Just throw errors normally - they'll be caught and converted
+    // Throw HandledError to surface a specific message to the client
     if (!name.trim()) {
-        throw new Error("Name is required");
+        throw new HandledError("Name is required", "VALIDATION_ERROR");
     }
 
     const user = await db.user.create({ data: { name } });
@@ -42,11 +51,65 @@ export const createUserAction = serverAction(
     },
     {
         onError: (error) => {
-            // Log errors to your error tracking service
+            // Log errors to your error tracking service (called for all errors)
             console.error("Action failed:", error);
         },
     }
 );
+```
+
+## HandledError
+
+A special error class that allows you to throw an error inside a `serverAction` and have its message surfaced to the client. Plain `Error` throws result in a generic error message to avoid leaking internal details.
+
+```ts
+import { HandledError } from "use-server-action/server";
+
+throw new HandledError(message: string, code?: string)
+```
+
+Use `HandledError` when you want to throw (rather than return) an error with a specific, user-facing message:
+
+```ts
+export const updateUserAction = serverAction(async (id: string, data: UpdateData) => {
+    const user = await db.user.findUnique({ where: { id } });
+
+    // Throw to exit early from any depth in the call stack
+    if (!user) {
+        throw new HandledError("User not found", "NOT_FOUND");
+    }
+
+    if (data.role === "admin" && !isAdmin()) {
+        throw new HandledError("Insufficient permissions", "FORBIDDEN");
+    }
+
+    return await db.user.update({ where: { id }, data });
+});
+```
+
+### HandledError vs return error()
+
+Both produce the same result shape. Choose based on control flow:
+
+```ts
+// Use return error() when you want to return from the current function
+if (!user) {
+    return error("User not found", "NOT_FOUND");
+}
+
+// Use throw new HandledError() when you want to exit from a nested call
+async function validateUser(id: string) {
+    const user = await db.user.findUnique({ where: { id } });
+    if (!user) {
+        throw new HandledError("User not found", "NOT_FOUND");
+    }
+    return user;
+}
+
+export const action = serverAction(async (id: string) => {
+    const user = await validateUser(id); // HandledError propagates up
+    return user;
+});
 ```
 
 ## success / error

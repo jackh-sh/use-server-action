@@ -47,6 +47,16 @@ type ServerActionFn<P extends unknown[], T> = (
 ) => Promise<ServerActionResult<T>>;
 ```
 
+### HandledError
+
+An error class that, when thrown inside a `serverAction`, surfaces its message to the client. Plain `Error` throws are converted to a generic error response.
+
+```ts
+class HandledError extends Error {
+    constructor(message: string, code?: string)
+}
+```
+
 ## Hook Types
 
 ### UseServerActionInput
@@ -205,4 +215,7 @@ import type {
     Middleware,
     ValidationSchema,
 } from "use-server-action/server";
+
+// HandledError is a class, not a type — import it as a value
+import { HandledError } from "use-server-action/server";
 ```
