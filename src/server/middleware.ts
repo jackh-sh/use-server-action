@@ -1,5 +1,6 @@
 "use server";
 
+import { HandledError } from "./errors";
 import type { ServerActionResult } from "./server-action";
 
 /**

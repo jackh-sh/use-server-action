@@ -1,5 +1,7 @@
 "use server";
 
+import { HandledError } from "./errors";
+
 export type ServerActionSuccess<T> = {
     ok: true;
     data: T;
@@ -44,8 +46,8 @@ export function serverAction<P extends unknown[], T>(
         } catch (err) {
             options?.onError?.(err);
 
-            if (err instanceof Error) {
-                return error(err.message, err.name);
+            if (err instanceof HandledError) {
+                return err.toServerActionError();
             }
 
             return error("An unexpected error occurred", "UNKNOWN_ERROR");
